@@ -1,0 +1,26 @@
+<menu xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    tools:context="eric.schedule_exporter.MainActivity">
+    <item
+        android:id="@+id/action_reload"
+        android:title="@string/action_reload"
+        android:icon="@drawable/ic_refresh"
+        app:showAsAction="ifRoom" />
+    <item
+        android:id="@+id/action_url"
+        android:title="@string/action_url"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_src"
+        android:title="@string/action_src"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/toggle_dock"
+        android:title="@string/toggle_dock"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_saf"
+        android:title="@string/action_saf"
+        app:showAsAction="never" />
+</menu>

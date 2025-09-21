@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">Schedule Exporter</string>
+    <string name="action_export">Export</string>
+    <string name="action_backward">Go Back</string>
+    <string name="action_forward">Go Forward</string>
+    <string name="action_reload">Reload</string>
+    <string name="action_url">Copy URL</string>
+    <string name="action_src">Dump Source</string>
+    <string name="action_saf">Open SAF</string>
+    <string name="toggle_dock">Toggle Docked Bar</string>
+    <string name="action_agent">Swap UA</string>
+</resources>

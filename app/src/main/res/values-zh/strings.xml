@@ -1,0 +1,12 @@
+<resources>
+    <string name="app_name">课程表导出器</string>
+    <string name="action_export">导出</string>
+    <string name="action_backward">后退</string>
+    <string name="action_forward">前进</string>
+    <string name="action_reload">刷新</string>
+    <string name="action_url">复制URL</string>
+    <string name="action_src">保存源代码</string>
+    <string name="action_saf">打开SAF</string>
+    <string name="toggle_dock">开关工具栏</string>
+    <string name="action_agent">切换UA</string>
+</resources>
