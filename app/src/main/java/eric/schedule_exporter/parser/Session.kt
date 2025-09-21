@@ -1,6 +1,6 @@
 package eric.schedule_exporter.parser
 
-import androidx.collection.IntSet
+import androidx.collection.MutableIntSet
 import java.time.DayOfWeek
 
 data class Session(
@@ -10,7 +10,7 @@ data class Session(
     val start: Int,
     val end: Int,
     val dayOfWeek: DayOfWeek,
-    val weeks: IntSet
+    val weeks: MutableIntSet
 ) {
     fun canMergeWith(session: Session): Boolean = this.subject == session.subject
             && this.teacher == session.subject

@@ -7,6 +7,10 @@ import java.io.File
 import java.io.Writer
 import java.time.DayOfWeek
 
+/// To disable useless wrapper lambda
+@Suppress("UnusedReceiverParameter")
+fun <K, V> K?.emptyMutableList() = mutableListOf<V>()
+
 fun String.escapeCSV(): String = if (this.any(",\"\r\n"::contains))
     "\"" + this.replace("\"", "\"\"") + "\""
 else this
