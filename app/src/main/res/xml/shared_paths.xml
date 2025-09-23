@@ -1,0 +1,14 @@
+<paths>
+    <external-cache-path
+        name="schedules"
+        path="schedules/" />
+    <external-cache-path
+        name="dumps"
+        path="dumps/" />
+    <cache-path
+        name="(schedules)"
+        path="schedules/" />
+    <cache-path
+        name="(dumps)"
+        path="dumps/" />
+</paths>

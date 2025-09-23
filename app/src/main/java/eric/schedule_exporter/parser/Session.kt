@@ -13,7 +13,7 @@ data class Session(
     val weeks: MutableIntSet
 ) {
     fun canMergeWith(session: Session): Boolean = this.subject == session.subject
-            && this.teacher == session.subject
+            && this.teacher == session.teacher
             && this.location == session.location
             && this.start == session.start
             && this.end == session.end

@@ -12,15 +12,11 @@
         android:title="@string/action_url"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_src"
-        android:title="@string/action_src"
+        android:id="@+id/action_dump"
+        android:title="@string/action_dump"
         app:showAsAction="never" />
     <item
         android:id="@+id/toggle_dock"
         android:title="@string/toggle_dock"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_saf"
-        android:title="@string/action_saf"
         app:showAsAction="never" />
 </menu>

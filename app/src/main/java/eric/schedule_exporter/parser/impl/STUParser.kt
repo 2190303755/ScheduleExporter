@@ -2,11 +2,13 @@ package eric.schedule_exporter.parser.impl
 
 import android.util.Log
 import androidx.collection.MutableIntSet
+import eric.schedule_exporter.parser.ParserContext
 import eric.schedule_exporter.parser.ScheduleParser
 import eric.schedule_exporter.parser.Session
 import eric.schedule_exporter.util.DO_NOT_CONTINUE
-import eric.schedule_exporter.util.emptyMutableList
 import eric.schedule_exporter.util.toDayOfWeek
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import org.jsoup.Jsoup
 import org.jsoup.nodes.Element
 import org.jsoup.nodes.Node
@@ -49,7 +51,7 @@ fun MutableList<Session>.addSTUCourses(info: Element): Boolean {
             val location = details.run {
                 state = STUParserState.PARSING_LOCATION
                 this.firstChild()?.lastChild().requireValue {
-                    NoSuchElementException("Failed to find teacher")
+                    NoSuchElementException("Failed to find location")
                 }
             }
             val weeks = MutableIntSet()
@@ -63,7 +65,9 @@ fun MutableList<Session>.addSTUCourses(info: Element): Boolean {
                     val groups = match.groupValues
                     val start = (groups.getOrNull(1) ?: continue).toInt()
                     val optional = groups.getOrNull(2)
-                    val end = if (optional === null) start else optional.toInt()
+                    val end = if (optional === null || optional.isEmpty())
+                        start
+                    else optional.toInt()
                     if (start < end) {
                         for (week in start..end) {
                             weeks += week
@@ -111,7 +115,7 @@ if (schedule === null) return '${DO_NOT_CONTINUE}';
 return schedule.outerHTML;
 })();"""
 
-    override suspend fun parseSchedule(message: String): Iterable<Session> {
+    override suspend fun parseSchedule(context: ParserContext, message: String): Iterable<Session> {
         var error = false
         val parsed = mutableListOf<Session>()
         val row = Jsoup.parseBodyFragment(message).getElementsByTag("tr").iterator()
@@ -130,14 +134,15 @@ return schedule.outerHTML;
             }
         }
         if (error) {
-            // TODO: dump source and notify
-            Log.w("STUParser", "Source is dumped into ...")
+            withContext(Dispatchers.Main) {
+                context.dumpSource(message)
+            }
         }
         val lookup = hashMapOf<String, MutableList<Session>>()
         val iterator = parsed.iterator()
         outer@ while (iterator.hasNext()) {
             val session = iterator.next()
-            val typed = lookup.computeIfAbsent(session.subject, String::emptyMutableList)
+            val typed = lookup.getOrPut(session.subject) { mutableListOf() }
             for (other in typed) {
                 if (session.canMergeWith(other)) {
                     other.weeks += session.weeks

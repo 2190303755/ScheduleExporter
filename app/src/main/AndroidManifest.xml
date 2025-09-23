@@ -27,22 +27,14 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
-
         <provider
-            android:name=".ScheduleProvider"
-            android:authorities="eric.schedule_exporter.provider"
-            android:exported="true"
-            android:grantUriPermissions="true"
-            android:permission="android.permission.MANAGE_DOCUMENTS">
-            <intent-filter>
-                <action android:name="android.content.action.DOCUMENTS_PROVIDER" />
-            </intent-filter>
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="eric.schedule_exporter.file_provider"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/shared_paths" />
         </provider>
-
     </application>
-    <queries>
-        <intent>
-            <action android:name="android.intent.action.OPEN_DOCUMENT_TREE" />
-        </intent>
-    </queries>
 </manifest>

@@ -5,8 +5,7 @@
     <string name="action_forward">前进</string>
     <string name="action_reload">刷新</string>
     <string name="action_url">复制URL</string>
-    <string name="action_src">保存源代码</string>
-    <string name="action_saf">打开SAF</string>
+    <string name="action_dump">转储快照</string>
     <string name="toggle_dock">开关工具栏</string>
     <string name="action_agent">切换UA</string>
 </resources>
