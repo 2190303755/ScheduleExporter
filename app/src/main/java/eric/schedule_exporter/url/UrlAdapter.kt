@@ -1,4 +1,4 @@
-package eric.schedule_exporter
+package eric.schedule_exporter.url
 
 import android.view.LayoutInflater
 import android.view.View
@@ -10,12 +10,12 @@ import eric.schedule_exporter.databinding.ItemUrlBinding
 
 class UrlAdapter(
     val navigator: (CharSequence) -> Unit
-) : ListAdapter<UrlAdapter.Item, UrlAdapter.Holder>(
-    object : DiffUtil.ItemCallback<Item>() {
-        override fun areItemsTheSame(old: Item, neo: Item) =
+) : ListAdapter<UrlItem, UrlAdapter.Holder>(
+    object : DiffUtil.ItemCallback<UrlItem>() {
+        override fun areItemsTheSame(old: UrlItem, neo: UrlItem) =
             old.url == neo.url
 
-        override fun areContentsTheSame(old: Item, neo: Item) =
+        override fun areContentsTheSame(old: UrlItem, neo: UrlItem) =
             old == neo
     }
 ) {
@@ -49,6 +49,4 @@ class UrlAdapter(
             }
         }
     }
-
-    data class Item(val name: String, val url: String)
 }

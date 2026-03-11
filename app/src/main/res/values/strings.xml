@@ -6,6 +6,7 @@
     <string name="action_reload">Reload</string>
     <string name="action_url">Copy URL</string>
     <string name="action_dump">Dump Snapshot</string>
+    <string name="action_console">Inject Console</string>
     <string name="toggle_dock">Toggle Docked Bar</string>
     <string name="action_agent">Swap UA</string>
 </resources>

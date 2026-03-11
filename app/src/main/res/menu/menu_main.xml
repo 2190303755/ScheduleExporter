@@ -16,6 +16,10 @@
         android:title="@string/action_dump"
         app:showAsAction="never" />
     <item
+        android:id="@+id/action_console"
+        android:title="@string/action_console"
+        app:showAsAction="never" />
+    <item
         android:id="@+id/toggle_dock"
         android:title="@string/toggle_dock"
         app:showAsAction="never" />
