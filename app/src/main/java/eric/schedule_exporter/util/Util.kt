@@ -1,12 +1,11 @@
 package eric.schedule_exporter.util
 
+import android.view.View
 import androidx.collection.MutableIntSet
+import com.google.android.material.behavior.HideViewOnScrollBehavior
 import org.apache.commons.text.StringEscapeUtils
-
-inline fun runSilently(action: () -> Unit) = try {
-    action()
-} catch (_: Exception) {
-}
+import kotlin.uuid.ExperimentalUuidApi
+import kotlin.uuid.Uuid
 
 inline fun <reified T> Iterator<T>.skip(): Boolean {
     if (this.hasNext()) {
@@ -15,6 +14,18 @@ inline fun <reified T> Iterator<T>.skip(): Boolean {
     }
     return false
 }
+
+inline fun <reified T : View> T.withHideBehavior(action: HideViewOnScrollBehavior<T>.() -> Unit) {
+    val behavior = try {
+        HideViewOnScrollBehavior.from(this)
+    } catch (_: Exception) {
+        return
+    }
+    behavior.action()
+}
+
+@OptIn(ExperimentalUuidApi::class)
+fun randomUniqueString() = Uuid.random().toHexString().uppercase()
 
 fun String.unwrapAndUnescape(): String = StringEscapeUtils.unescapeEcmaScript(
     this.substring(1, this.lastIndex)

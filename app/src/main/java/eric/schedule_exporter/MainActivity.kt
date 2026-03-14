@@ -58,9 +58,9 @@ import eric.schedule_exporter.util.QUOTED_DO_NOT_CONTINUE
 import eric.schedule_exporter.util.getDumpDir
 import eric.schedule_exporter.util.getScheduleDir
 import eric.schedule_exporter.util.resolveUnique
-import eric.schedule_exporter.util.runSilently
 import eric.schedule_exporter.util.toUri
 import eric.schedule_exporter.util.unwrapAndUnescape
+import eric.schedule_exporter.util.withHideBehavior
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -93,7 +93,7 @@ class MainActivity : BaseActivity(), ParserContext {
             val message =
                 "${error.errorCode}: ${error.description}\n${request.method} ${request.url}"
             Log.e("WebView Error", message)
-            Snackbar.make(view, message, LENGTH_LONG).setAnchorView(binding.dockedToolbar).show()
+            Snackbar.make(view, message, LENGTH_LONG).setAnchorView(binding.toolbar).show()
         }
 
         override fun onReceivedHttpError(
@@ -104,7 +104,7 @@ class MainActivity : BaseActivity(), ParserContext {
             val message =
                 "${error.statusCode} (${error.mimeType}): ${error.reasonPhrase}\n ${request.url}"
             Log.e("WebView Http Error", message)
-            Snackbar.make(view, message, LENGTH_LONG).setAnchorView(binding.dockedToolbar).show()
+            Snackbar.make(view, message, LENGTH_LONG).setAnchorView(binding.toolbar).show()
         }
 
         @SuppressLint("WebViewClientOnReceivedSslError")
@@ -121,26 +121,27 @@ class MainActivity : BaseActivity(), ParserContext {
 
         @MainThread
         override fun onItemChange(item: UrlItem) {
-            val index = this@MainActivity.viewModel.urls.indexOf(item)
+            val index = URL_SUGGESTIONS.indexOf(item)
             if (index < 0) return
             this@MainActivity.urlAdapter.notifyItemChanged(index)
         }
 
         override fun onAvailable(network: Network) {
-            this@MainActivity.viewModel.urls.forEach {
+            URL_SUGGESTIONS.forEach {
                 it.onNetworkAvailable(network, this)
             }
         }
     }
-    private lateinit var binding: ActivityMainBinding
-    private lateinit var viewModel: MainViewModel
-    private lateinit var urlAdapter: UrlAdapter
 
     private val goBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() {
             binding.webview.goBack()
         }
     }
+
+    private lateinit var binding: ActivityMainBinding
+    private lateinit var viewModel: MainViewModel
+    private lateinit var urlAdapter: UrlAdapter
 
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -207,29 +208,15 @@ class MainActivity : BaseActivity(), ParserContext {
         binding.forwardButton.setOnClickListener {
             this.binding.webview.goForward()
         }
-        binding.exportButton.apply {
-            setOnClickListener {
-                this@MainActivity.exportSchedule(viewModel.defaultParser) { uri ->
-                    Intent(Intent.ACTION_VIEW)
-                        .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                        .setDataAndType(uri, MIME_TYPE_CSV)
-                }
-            }
-            setOnLongClickListener {
-                this@MainActivity.exportSchedule(viewModel.defaultParser) { uri ->
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = MIME_TYPE_CSV
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                        },
-                        null
-                    )
-                }
-                true
+        binding.exportButton.setOnClickListener click@{
+            this@MainActivity.exportSchedule(getParser() ?: return@click) { uri ->
+                Intent(Intent.ACTION_VIEW)
+                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    .setDataAndType(uri, MIME_TYPE_CSV)
             }
         }
         val dialog = MaterialAlertDialogBuilder(this)
-            .setTitle("Parsing")
+            .setTitle(R.string.dialog_parsing)
             .setCancelable(false)
             .setView(FrameLayout(this).apply {
                 addView(
@@ -263,7 +250,7 @@ class MainActivity : BaseActivity(), ParserContext {
         }
         binding.searchSuggestion.let {
             urlAdapter = UrlAdapter(this::navigateTo)
-            urlAdapter.submitList(viewModel.urls)
+            urlAdapter.submitList(URL_SUGGESTIONS)
             it.adapter = urlAdapter
             it.layoutManager = LinearLayoutManager(this)
         }
@@ -276,10 +263,30 @@ class MainActivity : BaseActivity(), ParserContext {
                 }
             }
         }
+        binding.toolbar.withHideBehavior {
+            addOnScrollStateChangedListener { _, state ->
+                this@MainActivity.binding.searchBar.menu.findItem(R.id.toggle_dock)?.setTitle(
+                    if (state == HideViewOnScrollBehavior.STATE_SCROLLED_IN) {
+                        R.string.hide_dock
+                    } else {
+                        R.string.show_dock
+                    }
+                )
+            }
+        }
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
-        menuInflater.inflate(R.menu.menu_main, menu)
+        this.menuInflater.inflate(R.menu.menu_main, menu)
+        this.binding.toolbar.withHideBehavior {
+            this@MainActivity.binding.searchBar.menu.findItem(R.id.toggle_dock)?.setTitle(
+                if (isScrolledIn) {
+                    R.string.hide_dock
+                } else {
+                    R.string.show_dock
+                }
+            )
+        }
         return true
     }
 
@@ -292,26 +299,13 @@ class MainActivity : BaseActivity(), ParserContext {
                 )
             }
 
-            R.id.action_dump -> binding.webview.evaluateJavascript(
-                viewModel.defaultParser.injectJavaScript()
-            ) {
-                this@MainActivity.dumpSource(it.unwrapAndUnescape())
-            }
-
-            R.id.action_console -> {
-                binding.webview.evaluateJavascript(INJECT_CONSOLE) {
-                    Toast.makeText(this@MainActivity, it.unwrapAndUnescape(), Toast.LENGTH_SHORT)
-                        .show()
-                }
-            }
-
-            R.id.toggle_dock -> runSilently {
-                val view = binding.dockedToolbar
-                val behavior = HideViewOnScrollBehavior.from(view)
-                if (behavior.isScrolledIn) {
-                    behavior.slideOut(view)
-                } else {
-                    behavior.slideIn(view)
+            R.id.toggle_dock -> binding.toolbar.let {
+                it.withHideBehavior {
+                    if (isScrolledIn) {
+                        slideOut(it)
+                    } else {
+                        slideIn(it)
+                    }
                 }
             }
 
@@ -327,14 +321,45 @@ class MainActivity : BaseActivity(), ParserContext {
     }
 
     fun navigateTo(dest: CharSequence) {
-        val url = if (Patterns.WEB_URL.matcher(dest).matches()) dest.toString() else
-            "https://cn.bing.com/search?q=$dest"
-        this.binding.apply {
-            searchBar.setText(url)
-            searchView.hide()
-            webview.loadUrl(url)
+        when (val destination = dest.toString()) {
+            "app://csv" -> {
+                this.exportSchedule(getParser() ?: return) { uri ->
+                    Intent.createChooser(
+                        Intent(Intent.ACTION_SEND).apply {
+                            type = MIME_TYPE_CSV
+                            putExtra(Intent.EXTRA_STREAM, uri)
+                        },
+                        null
+                    )
+                }
+            }
+
+            "app://dump" -> binding.webview.evaluateJavascript(
+                getParser()?.injectJavaScript() ?: return
+            ) {
+                this.dumpSource(it.unwrapAndUnescape())
+            }
+
+            "app://console" -> binding.webview.evaluateJavascript(INJECT_CONSOLE) {
+                Toast.makeText(this, it.unwrapAndUnescape(), Toast.LENGTH_SHORT).show()
+            }
+
+            else -> {
+                val url = if (Patterns.WEB_URL.matcher(destination).matches()) {
+                    destination
+                } else {
+                    "https://cn.bing.com/search?q=$destination"
+                }
+                this.binding.apply {
+                    searchBar.setText(url)
+                    searchView.hide()
+                    webview.loadUrl(url)
+                }
+                this.viewModel.url.value = url
+                return
+            }
         }
-        viewModel.url.value = url
+        this.binding.searchView.hide()
     }
 
     @SuppressLint("SetJavaScriptEnabled")
@@ -397,19 +422,18 @@ class MainActivity : BaseActivity(), ParserContext {
                 viewModel.loading.value = false
                 return@eval
             }
+            val handler = SCHEDULE_HANDLER
             lifecycleScope.launch(Dispatchers.Default) {
                 val sessions = parser.parseSchedule(
                     this@MainActivity,
                     result.unwrapAndUnescape()
                 )
-                // TODO withContext get formatter
-                val formatter = viewModel.defaultFormatter
                 var file: File
                 withContext(Dispatchers.IO) {
                     file = this@MainActivity.getScheduleDir()
-                        .resolveUnique(null, formatter::buildFileName)
-                    file.outputStream().bufferedWriter(Charsets.UTF_8).use {
-                        formatter.format(sessions, it)
+                        .resolveUnique(null, handler::formatName)
+                    file.outputStream().use {
+                        handler.serialize(sessions, it)
                     }
                 }
                 val intent = launch(file.toUri(this@MainActivity))
@@ -429,5 +453,10 @@ class MainActivity : BaseActivity(), ParserContext {
     override fun onPause() {
         super.onPause()
         getSystemService<ConnectivityManager>()?.unregisterNetworkCallback(this.networkCallback)
+    }
+
+    fun getParser(): ScheduleParser? {
+        // TODO: pick via dialog
+        return SCHEDULE_PARSER.supplier(this.binding.webview.url ?: return null)
     }
 }

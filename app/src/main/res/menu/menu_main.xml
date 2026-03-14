@@ -1,7 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
-    xmlns:tools="http://schemas.android.com/tools"
-    tools:context="eric.schedule_exporter.MainActivity">
+    xmlns:app="http://schemas.android.com/apk/res-auto">
     <item
         android:id="@+id/action_reload"
         android:title="@string/action_reload"
@@ -12,15 +11,15 @@
         android:title="@string/action_url"
         app:showAsAction="never" />
     <item
-        android:id="@+id/action_dump"
-        android:title="@string/action_dump"
-        app:showAsAction="never" />
-    <item
-        android:id="@+id/action_console"
-        android:title="@string/action_console"
-        app:showAsAction="never" />
-    <item
         android:id="@+id/toggle_dock"
         android:title="@string/toggle_dock"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_timing"
+        android:title="@string/activity_timing"
+        app:showAsAction="never" />
+    <item
+        android:id="@+id/action_config"
+        android:title="@string/activity_config"
         app:showAsAction="never" />
 </menu>

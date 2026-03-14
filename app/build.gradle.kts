@@ -1,4 +1,5 @@
 plugins {
+    alias(libs.plugins.kotlin.serialization.android)
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
 }
@@ -47,6 +48,10 @@ dependencies {
     implementation(libs.androidx.activity.ktx)
     implementation(libs.jsoup)
     implementation(libs.commons.text)
+    implementation(libs.kotlinx.serialization.json)
+    implementation(libs.okhttp.coroutines)
+    implementation(libs.androidx.datastore)
+    implementation(libs.telefonica.webview)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.junit)
     androidTestImplementation(libs.androidx.espresso.core)

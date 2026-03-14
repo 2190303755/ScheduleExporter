@@ -21,20 +21,20 @@
             app:defaultScrollFlagsEnabled="false" />
     </com.google.android.material.appbar.AppBarLayout>
 
-    <eric.schedule_exporter.WebViewEx
+    <com.telefonica.nestedscrollwebview.NestedScrollWebView
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:id="@+id/webview"
-        app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <com.google.android.material.progressindicator.LinearProgressIndicator
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:id="@+id/indicator"
-        app:layout_behavior="com.google.android.material.appbar.AppBarLayout$ScrollingViewBehavior" />
+        app:layout_behavior="@string/appbar_scrolling_view_behavior" />
 
     <com.google.android.material.dockedtoolbar.DockedToolbarLayout
-        android:id="@+id/docked_toolbar"
+        android:id="@+id/toolbar"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"

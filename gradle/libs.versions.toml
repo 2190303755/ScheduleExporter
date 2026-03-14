@@ -6,14 +6,18 @@ junit = "4.13.2"
 junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 appcompat = "1.7.1"
-material = "1.13.0"
+material = "1.14.0-alpha10"
 constraintlayout = "2.1.4"
 navigationFragmentKtx = "2.6.0"
 navigationUiKtx = "2.6.0"
 lifecycleViewmodelKtx = "2.9.2"
 activityKtx = "1.11.0"
 jsoup = "1.22.1"
-commonsText = "1.14.0"
+commonsText = "1.15.0"
+jsonSerializationKtx = "1.10.0"
+okhttp = "5.3.2"
+datastore = "1.2.0"
+webview = "0.2.0"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -29,8 +33,13 @@ androidx-lifecycle-viewmodel-ktx = { group = "androidx.lifecycle", name = "lifec
 androidx-activity-ktx = { group = "androidx.activity", name = "activity-ktx", version.ref = "activityKtx" }
 jsoup = { group = "org.jsoup", name = "jsoup", version.ref = "jsoup" }
 commons-text = { group = "org.apache.commons", name = "commons-text", version.ref = "commonsText" }
+kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-serialization-json", version.ref = "jsonSerializationKtx" }
+okhttp-coroutines = { group = "com.squareup.okhttp3", name = "okhttp-coroutines", version.ref = "okhttp" }
+androidx-datastore = { group = "androidx.datastore", name = "datastore", version.ref = "datastore" }
+telefonica-webview = { group = "com.telefonica", name = "nestedscrollwebview", version.ref = "webview" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
 kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
+kotlin-serialization-android = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
 

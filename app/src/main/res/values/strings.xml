@@ -5,8 +5,12 @@
     <string name="action_forward">Go Forward</string>
     <string name="action_reload">Reload</string>
     <string name="action_url">Copy URL</string>
-    <string name="action_dump">Dump Snapshot</string>
-    <string name="action_console">Inject Console</string>
     <string name="toggle_dock">Toggle Docked Bar</string>
+    <string name="show_dock">Show Docked Bar</string>
+    <string name="hide_dock">Hide Docked Bar</string>
     <string name="action_agent">Swap UA</string>
+    <string name="dialog_parsing">Parsing</string>
+    <string name="activity_config">Settings</string>
+    <string name="activity_timing">Periods Manager</string>
+    <string name="action_unify_duration">Unify Duration</string>
 </resources>
