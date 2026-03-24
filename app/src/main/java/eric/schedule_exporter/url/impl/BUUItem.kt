@@ -1,36 +1,33 @@
 package eric.schedule_exporter.url.impl
 
 import android.net.Network
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import eric.schedule_exporter.url.UrlItem
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.net.InetAddress
 
 object BUUItem : UrlItem {
+    const val DIRECT = "https://jwxt.buu.edu.cn"
+    const val WEB_VPN = "https://wvpn.buu.edu.cn"
     var isInCampus: Boolean = false
     override val name: String
         get() = "北京联合大学"
-    override val url: String
-        get() = if (this.isInCampus) {
-            "https://jwxt.buu.edu.cn"
-        } else {
-            "https://wvpn.buu.edu.cn"
-        }
+    override var url: String by mutableStateOf(WEB_VPN)
+        internal set
 
-    override fun onNetworkAvailable(network: Network, observer: UrlItem.Observer) {
-        observer.coroutineScope.launch(Dispatchers.IO) {
-            val wasInCampus = isInCampus
-            try {
+    override suspend fun onNetworkAvailable(network: Network) {
+        withContext(Dispatchers.IO) {
+            val url = try {
                 InetAddress.getByName("go.buu.edu.cn")
-                isInCampus = true
+                DIRECT
             } catch (_: Exception) {
-                isInCampus = false
+                WEB_VPN
             }
-            if (isInCampus != wasInCampus) {
-                withContext(Dispatchers.Main) {
-                    observer.onItemChange(this@BUUItem)
-                }
+            withContext(Dispatchers.Main) {
+                this@BUUItem.url = url
             }
         }
     }

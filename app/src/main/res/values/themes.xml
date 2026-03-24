@@ -2,11 +2,9 @@
 
     <style name="Theme.ScheduleExporter" parent="Theme.Material3.DayNight.NoActionBar">
         <item name="android:windowDrawsSystemBarBackgrounds">true</item>
-        <item name="android:windowTranslucentStatus">true</item>
-        <item name="android:windowTranslucentNavigation">true</item>
         <item name="android:windowLightStatusBar">?attr/isLightTheme</item>
         <item name="enableEdgeToEdge">true</item>
         <item name="android:windowLightNavigationBar" tools:targetApi="27">?attr/isLightTheme</item>
-        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">shortEdges</item>
+        <item name="android:windowLayoutInDisplayCutoutMode" tools:targetApi="27">always</item>
     </style>
 </resources>

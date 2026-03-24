@@ -3,11 +3,19 @@ package eric.schedule_exporter.handler.impl
 import android.content.Context
 import android.content.Intent
 import androidx.collection.IntSet
-import androidx.lifecycle.MutableLiveData
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.stringResource
+import eric.schedule_exporter.R
+import eric.schedule_exporter.data.HandlerSpec
+import eric.schedule_exporter.data.setScheduleHandler
+import eric.schedule_exporter.handler.HandlerType
 import eric.schedule_exporter.handler.ScheduleHandler
-import eric.schedule_exporter.handler.serializeToFile
 import eric.schedule_exporter.util.MIME_TYPE_CSV
 import eric.schedule_exporter.util.Session
+import eric.schedule_exporter.util.getScheduleDir
+import eric.schedule_exporter.util.resolveUnique
 import eric.schedule_exporter.util.toUri
 import eric.schedule_exporter.util.write
 import kotlinx.coroutines.Dispatchers
@@ -15,9 +23,12 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.text.StringEscapeUtils
 import java.io.OutputStream
 
-object WakeUpHandler : ScheduleHandler {
-    override fun formatName(id: String) = "${id}.csv"
+object WakeUpHandler : ScheduleHandler<Map<Session, IntSet>> {
+    override val type: HandlerType
+        get() = HandlerType.WAKE_UP_HANDLER
 
+    override fun formatName(id: String) = "${id}.csv"
+    override fun convert(sessions: Map<Session, IntSet>) = sessions
     override fun serialize(sessions: Map<Session, IntSet>, stream: OutputStream) {
         val writer = stream.bufferedWriter()
         writer.write("课程名称,星期,开始节数,结束节数,老师,地点,周数")
@@ -38,20 +49,34 @@ object WakeUpHandler : ScheduleHandler {
         writer.flush()
     }
 
-    override suspend fun export(
-        sessions: Map<Session, IntSet>,
-        context: Context,
-        indicator: MutableLiveData<Boolean>
-    ) {
+    override suspend fun export(data: Map<Session, IntSet>, context: Context) {
+        val file = context.getScheduleDir().resolveUnique(null, this::formatName)
+        file.outputStream().use {
+            this.serialize(data, it)
+        }
         val intent = Intent(Intent.ACTION_VIEW)
             .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
             .setDataAndType(
-                sessions.serializeToFile(context, this).toUri(context),
+                file.toUri(context),
                 MIME_TYPE_CSV
             )
         withContext(Dispatchers.Main) {
-            indicator.value = false
             context.startActivity(intent)
         }
     }
+
+    override suspend fun loadSpec(config: HandlerSpec?): Boolean = true
+
+    override suspend fun saveSpec(): HandlerSpec? = null
+
+    @Composable
+    override fun ConfigSection(onCancel: () -> Unit) {
+        val context = LocalContext.current
+        LaunchedEffect(Unit) {
+            context.setScheduleHandler(WakeUpHandler)
+        }
+    }
+
+    @Composable
+    override fun displayName() = stringResource(R.string.app_wakeup)
 }

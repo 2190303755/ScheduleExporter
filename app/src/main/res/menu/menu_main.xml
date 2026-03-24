@@ -22,4 +22,8 @@
         android:id="@+id/action_config"
         android:title="@string/activity_config"
         app:showAsAction="never" />
+    <item
+        android:id="@+id/action_new"
+        android:title="@string/app_name"
+        app:showAsAction="never" />
 </menu>

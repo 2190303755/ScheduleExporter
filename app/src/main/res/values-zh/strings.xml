@@ -5,6 +5,8 @@
     <string name="action_forward">前进</string>
     <string name="action_reload">刷新</string>
     <string name="action_url">复制URL</string>
+    <string name="expander_expand">展开</string>
+    <string name="expander_collapse">收起</string>
     <string name="toggle_dock">开关工具栏</string>
     <string name="show_dock">显示工具栏</string>
     <string name="hide_dock">隐藏工具栏</string>
@@ -13,4 +15,8 @@
     <string name="activity_config">设置</string>
     <string name="activity_timing">时间段管理</string>
     <string name="action_unify_duration">统一时长</string>
+    <string name="miai_integrated">超级小爱</string>
+    <string name="university_unspecified">自动检测</string>
+    <string name="university_stu">汕头大学</string>
+    <string name="university_buu">北京联合大学</string>
 </resources>

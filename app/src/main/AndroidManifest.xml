@@ -9,18 +9,23 @@
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
 
     <application
+        android:name=".ScheduleExporterApplication"
+        android:enableOnBackInvokedCallback="true"
         android:icon="@mipmap/ic_launcher"
         android:label="@string/app_name"
         android:supportsRtl="true"
         android:theme="@style/Theme.ScheduleExporter"
         android:usesCleartextTraffic="true"
-        android:enableOnBackInvokedCallback="true"
         tools:targetApi="33">
-
+        <activity
+            android:name=".NewActivity"
+            android:exported="false"
+            android:label="@string/title_activity_new"
+            android:theme="@style/Theme.ScheduleExporter" />
         <activity
             android:name=".MainActivity"
-            android:exported="true"
             android:configChanges="orientation|screenSize"
+            android:exported="true"
             android:theme="@style/Theme.ScheduleExporter">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
@@ -28,6 +33,15 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name=".TimingActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ScheduleExporter" />
+        <activity
+            android:name=".ConfigActivity"
+            android:exported="false"
+            android:theme="@style/Theme.ScheduleExporter" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="eric.schedule_exporter.file_provider"
@@ -38,4 +52,5 @@
                 android:resource="@xml/shared_paths" />
         </provider>
     </application>
+
 </manifest>

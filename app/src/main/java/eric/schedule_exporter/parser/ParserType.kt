@@ -1,5 +1,7 @@
 package eric.schedule_exporter.parser
 
+import androidx.annotation.StringRes
+import eric.schedule_exporter.R
 import eric.schedule_exporter.parser.impl.BUUParser
 import eric.schedule_exporter.parser.impl.STUParser
 import okhttp3.HttpUrl.Companion.toHttpUrl
@@ -20,8 +22,15 @@ fun String.inferParserByDomain(): ScheduleParser? {
     }
 }
 
-enum class ParserType(val supplier: (String) -> ScheduleParser?) {
-    UNSPECIFIED(String::inferParserByDomain),
-    STU_PARSER({ STUParser }),
-    BUU_PARSER({ BUUParser })
+enum class ParserType(
+    val parser: ScheduleParser?,
+    @field:StringRes @param:StringRes val text: Int
+) {
+    UNSPECIFIED(null, R.string.university_unspecified),
+    STU_PARSER(STUParser, R.string.university_stu),
+    BUU_PARSER(BUUParser, R.string.university_buu);
+
+    fun resolveParser(url: String?): ScheduleParser? {
+        return this.parser ?: url?.inferParserByDomain()
+    }
 }

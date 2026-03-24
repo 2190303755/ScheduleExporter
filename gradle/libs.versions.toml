@@ -7,10 +7,10 @@ junitVersion = "1.1.5"
 espressoCore = "3.5.1"
 appcompat = "1.7.1"
 material = "1.14.0-alpha10"
-constraintlayout = "2.1.4"
+constraintlayout = "2.2.1"
 navigationFragmentKtx = "2.6.0"
 navigationUiKtx = "2.6.0"
-lifecycleViewmodelKtx = "2.9.2"
+lifecycleViewmodelKtx = "2.9.4"
 activityKtx = "1.11.0"
 jsoup = "1.22.1"
 commonsText = "1.15.0"
@@ -18,6 +18,10 @@ jsonSerializationKtx = "1.10.0"
 okhttp = "5.3.2"
 datastore = "1.2.0"
 webview = "0.2.0"
+lifecycleRuntimeKtx = "2.9.4"
+activityCompose = "1.11.0"
+composeBom = "2026.03.00"
+composeMaterial = "1.5.0-alpha15"
 
 [libraries]
 androidx-core-ktx = { group = "androidx.core", name = "core-ktx", version.ref = "coreKtx" }
@@ -37,9 +41,20 @@ kotlinx-serialization-json = { group = "org.jetbrains.kotlinx", name = "kotlinx-
 okhttp-coroutines = { group = "com.squareup.okhttp3", name = "okhttp-coroutines", version.ref = "okhttp" }
 androidx-datastore = { group = "androidx.datastore", name = "datastore", version.ref = "datastore" }
 telefonica-webview = { group = "com.telefonica", name = "nestedscrollwebview", version.ref = "webview" }
+androidx-lifecycle-runtime-ktx = { group = "androidx.lifecycle", name = "lifecycle-runtime-ktx", version.ref = "lifecycleRuntimeKtx" }
+androidx-activity-compose = { group = "androidx.activity", name = "activity-compose", version.ref = "activityCompose" }
+androidx-compose-bom = { group = "androidx.compose", name = "compose-bom", version.ref = "composeBom" }
+androidx-compose-ui = { group = "androidx.compose.ui", name = "ui" }
+androidx-compose-ui-graphics = { group = "androidx.compose.ui", name = "ui-graphics" }
+androidx-compose-ui-tooling = { group = "androidx.compose.ui", name = "ui-tooling" }
+androidx-compose-ui-tooling-preview = { group = "androidx.compose.ui", name = "ui-tooling-preview" }
+androidx-compose-ui-test-manifest = { group = "androidx.compose.ui", name = "ui-test-manifest" }
+androidx-compose-ui-test-junit4 = { group = "androidx.compose.ui", name = "ui-test-junit4" }
+androidx-compose-material3 = { group = "androidx.compose.material3", name = "material3", version.ref = "composeMaterial" }
+androidx-compose-icons = { group = "androidx.compose.material", name = "material-icons-extended" }
 
 [plugins]
 android-application = { id = "com.android.application", version.ref = "agp" }
-kotlin-android = { id = "org.jetbrains.kotlin.android", version.ref = "kotlin" }
 kotlin-serialization-android = { id = "org.jetbrains.kotlin.plugin.serialization", version.ref = "kotlin" }
+kotlin-compose = { id = "org.jetbrains.kotlin.plugin.compose", version.ref = "kotlin" }
 

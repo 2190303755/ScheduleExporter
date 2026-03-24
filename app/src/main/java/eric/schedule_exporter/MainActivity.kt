@@ -7,7 +7,6 @@ import android.content.Intent
 import android.graphics.Bitmap
 import android.net.ConnectivityManager
 import android.net.Network
-import android.net.Uri
 import android.net.http.SslError
 import android.os.Bundle
 import android.util.Log
@@ -43,29 +42,30 @@ import com.google.android.material.progressindicator.CircularProgressIndicator
 import com.google.android.material.search.SearchView
 import com.google.android.material.snackbar.BaseTransientBottomBar.LENGTH_LONG
 import com.google.android.material.snackbar.Snackbar
+import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_HANDLER
+import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PARSER
+import eric.schedule_exporter.ScheduleExporterApplication.Companion.URL_SUGGESTIONS
 import eric.schedule_exporter.databinding.ActivityMainBinding
+import eric.schedule_exporter.handler.dumpSchedule
+import eric.schedule_exporter.handler.exportSchedule
 import eric.schedule_exporter.parser.ParserContext
 import eric.schedule_exporter.parser.ScheduleParser
 import eric.schedule_exporter.url.UrlAdapter
-import eric.schedule_exporter.url.UrlItem
 import eric.schedule_exporter.util.DO_NOT_CONTINUE
 import eric.schedule_exporter.util.DUMPER_NAME
 import eric.schedule_exporter.util.DUMP_SOURCES
 import eric.schedule_exporter.util.INJECT_CONSOLE
-import eric.schedule_exporter.util.MIME_TYPE_CSV
 import eric.schedule_exporter.util.MIME_TYPE_ZIP
 import eric.schedule_exporter.util.QUOTED_DO_NOT_CONTINUE
 import eric.schedule_exporter.util.getDumpDir
-import eric.schedule_exporter.util.getScheduleDir
 import eric.schedule_exporter.util.resolveUnique
+import eric.schedule_exporter.util.startActivity
 import eric.schedule_exporter.util.toUri
 import eric.schedule_exporter.util.unwrapAndUnescape
 import eric.schedule_exporter.util.withHideBehavior
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import java.io.File
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 import kotlin.math.roundToInt
@@ -113,22 +113,12 @@ class MainActivity : BaseActivity(), ParserContext {
         }
     }
 
-    private val networkCallback = object :
-        ConnectivityManager.NetworkCallback(),
-        UrlItem.Observer {
-        override val coroutineScope: CoroutineScope
-            get() = this@MainActivity.lifecycleScope
-
-        @MainThread
-        override fun onItemChange(item: UrlItem) {
-            val index = URL_SUGGESTIONS.indexOf(item)
-            if (index < 0) return
-            this@MainActivity.urlAdapter.notifyItemChanged(index)
-        }
-
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            URL_SUGGESTIONS.forEach {
-                it.onNetworkAvailable(network, this)
+            this@MainActivity.lifecycleScope.launch(Dispatchers.Main) {
+                URL_SUGGESTIONS.forEach {
+                    it.onNetworkAvailable(network)
+                }
             }
         }
     }
@@ -146,6 +136,7 @@ class MainActivity : BaseActivity(), ParserContext {
     @SuppressLint("SetJavaScriptEnabled")
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
         WebView.setWebContentsDebuggingEnabled(true)
         viewModel = ViewModelProvider(this)[MainViewModel::class.java]
         val binding = ActivityMainBinding.inflate(this.layoutInflater)
@@ -209,10 +200,25 @@ class MainActivity : BaseActivity(), ParserContext {
             this.binding.webview.goForward()
         }
         binding.exportButton.setOnClickListener click@{
-            this@MainActivity.exportSchedule(getParser() ?: return@click) { uri ->
-                Intent(Intent.ACTION_VIEW)
-                    .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                    .setDataAndType(uri, MIME_TYPE_CSV)
+            val parser = this.getParser() ?: return@click
+            this.viewModel.loading.value = true
+            this.binding.webview.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
+                if (result === null || result == QUOTED_DO_NOT_CONTINUE) {
+                    viewModel.loading.value = false
+                    return@eval
+                }
+                lifecycleScope.launch(Dispatchers.Default) {
+                    SCHEDULE_HANDLER.exportSchedule(
+                        parser.parseSchedule(
+                            this@MainActivity,
+                            result.unwrapAndUnescape()
+                        ),
+                        this@MainActivity
+                    )
+                    withContext(Dispatchers.Main) {
+                        viewModel.loading.value = false
+                    }
+                }
             }
         }
         val dialog = MaterialAlertDialogBuilder(this)
@@ -309,6 +315,10 @@ class MainActivity : BaseActivity(), ParserContext {
                 }
             }
 
+            R.id.action_new -> startActivity<NewActivity>()
+            R.id.action_config -> startActivity<ConfigActivity>()
+            R.id.action_timing -> startActivity<TimingActivity>()
+
             else -> return super.onOptionsItemSelected(item)
         }
         return true
@@ -323,14 +333,25 @@ class MainActivity : BaseActivity(), ParserContext {
     fun navigateTo(dest: CharSequence) {
         when (val destination = dest.toString()) {
             "app://csv" -> {
-                this.exportSchedule(getParser() ?: return) { uri ->
-                    Intent.createChooser(
-                        Intent(Intent.ACTION_SEND).apply {
-                            type = MIME_TYPE_CSV
-                            putExtra(Intent.EXTRA_STREAM, uri)
-                        },
-                        null
-                    )
+                val parser = this.getParser() ?: return
+                this.viewModel.loading.value = true
+                this.binding.webview.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
+                    if (result === null || result == QUOTED_DO_NOT_CONTINUE) {
+                        viewModel.loading.value = false
+                        return@eval
+                    }
+                    lifecycleScope.launch(Dispatchers.Default) {
+                        SCHEDULE_HANDLER.dumpSchedule(
+                            parser.parseSchedule(
+                                this@MainActivity,
+                                result.unwrapAndUnescape()
+                            ),
+                            this@MainActivity
+                        )
+                        withContext(Dispatchers.Main) {
+                            viewModel.loading.value = false
+                        }
+                    }
                 }
             }
 
@@ -415,36 +436,6 @@ class MainActivity : BaseActivity(), ParserContext {
         }
     }
 
-    private fun exportSchedule(parser: ScheduleParser, launch: (Uri) -> Intent) {
-        this.viewModel.loading.value = true
-        this.binding.webview.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
-            if (result === null || result == QUOTED_DO_NOT_CONTINUE) {
-                viewModel.loading.value = false
-                return@eval
-            }
-            val handler = SCHEDULE_HANDLER
-            lifecycleScope.launch(Dispatchers.Default) {
-                val sessions = parser.parseSchedule(
-                    this@MainActivity,
-                    result.unwrapAndUnescape()
-                )
-                var file: File
-                withContext(Dispatchers.IO) {
-                    file = this@MainActivity.getScheduleDir()
-                        .resolveUnique(null, handler::formatName)
-                    file.outputStream().use {
-                        handler.serialize(sessions, it)
-                    }
-                }
-                val intent = launch(file.toUri(this@MainActivity))
-                withContext(Dispatchers.Main) {
-                    viewModel.loading.value = false
-                    startActivity(intent)
-                }
-            }
-        }
-    }
-
     override fun onResume() {
         super.onResume()
         getSystemService<ConnectivityManager>()?.registerDefaultNetworkCallback(this.networkCallback)
@@ -457,6 +448,6 @@ class MainActivity : BaseActivity(), ParserContext {
 
     fun getParser(): ScheduleParser? {
         // TODO: pick via dialog
-        return SCHEDULE_PARSER.supplier(this.binding.webview.url ?: return null)
+        return SCHEDULE_PARSER.resolveParser(this.binding.webview.url)
     }
 }
