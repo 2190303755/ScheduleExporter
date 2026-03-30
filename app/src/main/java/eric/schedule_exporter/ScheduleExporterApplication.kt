@@ -12,7 +12,7 @@ import eric.schedule_exporter.parser.ParserType
 import eric.schedule_exporter.url.UrlItem
 import eric.schedule_exporter.url.impl.BUUItem
 import eric.schedule_exporter.url.impl.SimpleItem
-import eric.schedule_exporter.util.PeriodHolder
+import eric.schedule_exporter.util.UniquePeriod
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -46,11 +46,13 @@ class ScheduleExporterApplication : Application() {
             }
         }
         this.applicationScope.launch(Dispatchers.IO) {
-            periodConfig.data.collectLatest {
-                if (it !== SCHEDULE_PERIODS) {
+            periodConfig.data.collectLatest { periods ->
+                if (periods !== SCHEDULE_PERIODS) {
                     withContext(Dispatchers.Main) {
                         SCHEDULE_PERIODS.clear()
-                        SCHEDULE_PERIODS.addAll(it)
+                        periods.forEach {
+                            SCHEDULE_PERIODS.add(it.makeUnique())
+                        }
                     }
                 }
             }
@@ -73,7 +75,7 @@ class ScheduleExporterApplication : Application() {
         var SCHEDULE_HANDLER: ScheduleHandler<*> = MiAIHandler
 
         @JvmField
-        val SCHEDULE_PERIODS: SnapshotStateList<PeriodHolder> = mutableStateListOf()
+        val SCHEDULE_PERIODS: SnapshotStateList<UniquePeriod> = mutableStateListOf()
 
         @JvmField
         val URL_SUGGESTIONS: SnapshotStateList<UrlItem> = mutableStateListOf(

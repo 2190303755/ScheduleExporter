@@ -16,6 +16,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.res.stringResource
 import eric.schedule_exporter.R
 
+val fadeInAndExpandVertically = fadeIn() + expandVertically()
+val fadeOutAndShrinkVertically = fadeOut() + shrinkVertically()
+
 @Composable
 fun ExpanderIndicator(expanded: Boolean) {
     Indicator(
@@ -29,8 +32,8 @@ fun Expander(
     expanded: Boolean,
     header: @Composable ColumnScope.() -> Unit,
     modifier: Modifier = Modifier,
-    enterTransition: EnterTransition = fadeIn() + expandVertically(),
-    exitTransition: ExitTransition = fadeOut() + shrinkVertically(),
+    enterTransition: EnterTransition = fadeInAndExpandVertically,
+    exitTransition: ExitTransition = fadeOutAndShrinkVertically,
     content: @Composable () -> Unit,
 ) {
     InfoBox(modifier) {

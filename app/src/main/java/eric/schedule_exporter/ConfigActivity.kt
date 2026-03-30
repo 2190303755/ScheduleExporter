@@ -4,10 +4,6 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
 import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.expandVertically
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.shrinkVertically
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
@@ -47,6 +43,8 @@ import eric.schedule_exporter.ui.InfoBar
 import eric.schedule_exporter.ui.InfoBox
 import eric.schedule_exporter.ui.TooltipBox
 import eric.schedule_exporter.ui.applyInfoBoxPadding
+import eric.schedule_exporter.ui.fadeInAndExpandVertically
+import eric.schedule_exporter.ui.fadeOutAndShrinkVertically
 import eric.schedule_exporter.ui.theme.setThemedContent
 
 class ConfigActivity : ComponentActivity() {
@@ -135,7 +133,7 @@ fun HandlerTypeSection() {
         AnimatedContent(
             targetState = selected.value,
             transitionSpec = {
-                (fadeIn() + expandVertically()) togetherWith (fadeOut() + shrinkVertically())
+                fadeInAndExpandVertically togetherWith fadeOutAndShrinkVertically
             },
             contentAlignment = Alignment.TopCenter
         ) {

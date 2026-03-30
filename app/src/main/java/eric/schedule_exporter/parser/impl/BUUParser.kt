@@ -90,16 +90,14 @@ return schedules.length ? schedules[0].outerHTML : ${QUOTED_DO_NOT_CONTINUE};
                                 ),
                                 ::MutableIntSet
                             )
-                            if (time.matches(REGEX_SKIP_WEEK)) {
+                            if (time.contains(REGEX_SKIP_WEEK)) {
                                 val left = weeks.first
                                 val right = weeks.second
-                                for (week in IntProgression.fromClosedRange(
+                                IntProgression.fromClosedRange(
                                     minOf(left, right),
                                     maxOf(left, right),
                                     2
-                                )) {
-                                    repeat += week
-                                }
+                                ).forEach(repeat::add)
                             } else {
                                 repeat.addRangeClosed(weeks.first, weeks.second)
                             }

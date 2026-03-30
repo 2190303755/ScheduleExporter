@@ -15,6 +15,8 @@
     <string name="activity_config">设置</string>
     <string name="activity_timing">时间段管理</string>
     <string name="action_unify_duration">统一时长</string>
+    <string name="action_confirm">确认</string>
+    <string name="action_cancel">取消</string>
     <string name="miai_integrated">超级小爱</string>
     <string name="university_unspecified">自动检测</string>
     <string name="university_stu">汕头大学</string>

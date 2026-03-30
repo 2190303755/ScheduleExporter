@@ -2,6 +2,7 @@ package eric.schedule_exporter.handler.impl
 
 import android.content.ClipData
 import android.content.Context
+import android.util.Log
 import android.widget.Toast
 import androidx.collection.IntSet
 import androidx.compose.foundation.clickable
@@ -53,6 +54,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import eric.schedule_exporter.R
+import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PERIODS
 import eric.schedule_exporter.data.HandlerSpec
 import eric.schedule_exporter.data.MiAISpec
 import eric.schedule_exporter.data.setScheduleHandler
@@ -65,13 +67,21 @@ import eric.schedule_exporter.ui.InfoBar
 import eric.schedule_exporter.ui.TextButton
 import eric.schedule_exporter.ui.TooltipBox
 import eric.schedule_exporter.ui.applyInfoBarPadding
+import eric.schedule_exporter.util.Either
 import eric.schedule_exporter.util.JSON_CONFIG
 import eric.schedule_exporter.util.MiAIContext
 import eric.schedule_exporter.util.MiAIDebugInfo
+import eric.schedule_exporter.util.MiAIPeriod
+import eric.schedule_exporter.util.MiAISessionStyle
 import eric.schedule_exporter.util.MiAISource
 import eric.schedule_exporter.util.Session
 import eric.schedule_exporter.util.collectText
+import eric.schedule_exporter.util.configureSchedule
+import eric.schedule_exporter.util.createSchedule
+import eric.schedule_exporter.util.end
+import eric.schedule_exporter.util.querySchedule
 import eric.schedule_exporter.util.toMiAISession
+import eric.schedule_exporter.util.uploadSessions
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -95,9 +105,19 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
     var miai: MiAIContext? = null
 
     override fun formatName(id: String) = "${id}.json"
-    override fun convert(sessions: Map<Session, IntSet>) = JSON_CONFIG.encodeToJsonElement(
-        sessions.map { it.key.toMiAISession(it.value) }
-    )
+    override fun convert(sessions: Map<Session, IntSet>): JsonElement {
+        var index = 0
+        val styles = hashMapOf<String, MiAISessionStyle>()
+        return JSON_CONFIG.encodeToJsonElement(
+            sessions.map {
+                it.key.toMiAISession(it.value, styles.getOrPut(it.key.subject) {
+                    val style = MiAISessionStyle.BUILTIN_STYLES[index]
+                    index = (index + 1) % MiAISessionStyle.BUILTIN_STYLES.size
+                    style
+                })
+            }
+        )
+    }
 
     @OptIn(ExperimentalSerializationApi::class)
     override fun serialize(sessions: JsonElement, stream: OutputStream) {
@@ -107,7 +127,35 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
     override suspend fun export(data: JsonElement, context: Context) {
         val miai = this.miai ?: return
         withContext(Dispatchers.IO) {
-            TODO()
+            try {
+                val name = "schedule"
+                val schedule = miai.createSchedule(name)
+                require(schedule != 0L) {
+                    "Failed to create schedule"
+                }
+                val detail = miai.querySchedule(schedule)
+                if (miai.configureSchedule(
+                        detail,
+                        SCHEDULE_PERIODS
+                            .sortedBy { it.period.start }
+                            .mapIndexed { index, period ->
+                                MiAIPeriod(
+                                    index = index + 1,
+                                    start = period.start,
+                                    end = period.end
+                                )
+                            }
+                    )
+                ) {
+                    val ids = miai.uploadSessions(schedule, Either.Right(data))
+                    Log.d("MiAIHandler", "Upload ${ids.size} session(s)")
+                }
+            } catch (e: Exception) {
+                Log.e("MiAIHandler", "Failed to upload", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, e.message ?: "未知错误", Toast.LENGTH_SHORT).show()
+                }
+            }
         }
     }
 

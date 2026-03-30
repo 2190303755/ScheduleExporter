@@ -11,11 +11,11 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyItemScope
 import androidx.compose.foundation.lazy.itemsIndexed
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.selection.toggleable
@@ -27,35 +27,37 @@ import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.material3.TimePicker
+import androidx.compose.material3.TimePickerDisplayMode
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.material3.rememberTimePickerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.Saver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.window.DialogProperties
+import androidx.lifecycle.lifecycleScope
 import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PERIODS
 import eric.schedule_exporter.data.addPeriod
 import eric.schedule_exporter.data.removePeriod
@@ -63,17 +65,59 @@ import eric.schedule_exporter.data.setAllDurations
 import eric.schedule_exporter.data.updatePeriod
 import eric.schedule_exporter.ui.Expander
 import eric.schedule_exporter.ui.ExpanderIndicator
+import eric.schedule_exporter.ui.IconButton
 import eric.schedule_exporter.ui.Indicator
 import eric.schedule_exporter.ui.InfoBar
-import eric.schedule_exporter.ui.InfoBox
+import eric.schedule_exporter.ui.TextButton
+import eric.schedule_exporter.ui.TimePickerDialog
 import eric.schedule_exporter.ui.TooltipBox
 import eric.schedule_exporter.ui.applyInfoBarPadding
 import eric.schedule_exporter.ui.applyInfoBoxPadding
 import eric.schedule_exporter.ui.theme.setThemedContent
 import eric.schedule_exporter.util.Moment
-import eric.schedule_exporter.util.Period
-import eric.schedule_exporter.util.PeriodHolder
+import eric.schedule_exporter.util.PeriodRecord
+import eric.schedule_exporter.util.end
 import kotlinx.coroutines.launch
+
+sealed interface Edit {
+    val index: Int
+
+    object Append : Edit {
+        override val index: Int
+            get() = -1
+    }
+
+    @JvmInline
+    value class Start(override val index: Int) : Edit
+
+    @JvmInline
+    value class End(override val index: Int) : Edit
+
+    @JvmInline
+    value class Duration(override val index: Int) : Edit
+}
+
+fun Edit.encode(): Long = (this.index.toLong() shl 32) or when (this) {
+    Edit.Append -> 1L
+    is Edit.Start -> 2L
+    is Edit.End -> 3L
+    is Edit.Duration -> 4L
+}
+
+val EditSaver: Saver<MutableState<Edit?>, Long> = Saver(
+    save = { state -> state.value?.encode() ?: 0L },
+    restore = { value ->
+        mutableStateOf(
+            when (value and 0xFFFFFFFF) {
+                1L -> Edit.Append
+                2L -> Edit.Start((value shr 32).toInt())
+                3L -> Edit.End((value shr 32).toInt())
+                4L -> Edit.Duration((value shr 32).toInt())
+                else -> null
+            }
+        )
+    }
+)
 
 class TimingActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -81,6 +125,8 @@ class TimingActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         this.enableEdgeToEdge()
         this.setThemedContent {
+            var edit by rememberSaveable(saver = EditSaver) { mutableStateOf(null) }
+            val desiredPickerMode = remember { mutableStateOf(TimePickerDisplayMode.Picker) }
             val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
             Scaffold(
                 modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -89,58 +135,183 @@ class TimingActivity : ComponentActivity() {
                         scrollBehavior = scrollBehavior,
                         title = { Text(stringResource(R.string.activity_timing)) },
                         navigationIcon = {
-                            TooltipBox("返回", TooltipAnchorPosition.Below) {
-                                IconButton(onClick = { this.finish() }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, it)
+                            TooltipBox("返回", TooltipAnchorPosition.Below) { tooltip ->
+                                IconButton(Icons.AutoMirrored.Filled.ArrowBack, tooltip) {
+                                    this.finish()
                                 }
                             }
                         }
                     )
+                },
+                floatingActionButton = {
+                    FloatingActionButton(
+                        onClick = { edit = Edit.Append },
+                        modifier = Modifier.padding(16.dp)
+                    ) {
+                        Icon(imageVector = Icons.Filled.Add, contentDescription = "添加时间段")
+                    }
                 }
             ) { innerPadding ->
-                val scope = rememberCoroutineScope()
                 val lazyColumnState = rememberLazyListState()
                 LazyColumn(
                     state = lazyColumnState,
                     contentPadding = innerPadding + PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxHeight()
                 ) {
                     itemsIndexed(
                         SCHEDULE_PERIODS,
-                        key = { _, holder -> holder.id },
-                        itemContent = LazyItemScope::PeriodItem
-                    )
-                    item("") {
-                        var showDialog by remember { mutableStateOf(false) }
-                        InfoBox(Modifier.animateItem()) {
-                            InfoBar(
-                                title = "添加时间段",
-                                modifier = Modifier
-                                    .clickable {
-                                        showDialog = true
-                                    }
-                                    .fillMaxWidth()
-                                    .applyInfoBoxPadding(),
-                                indicator = {
-                                    Indicator(icon = Icons.Filled.Add)
+                        key = { _, period -> period.id }
+                    ) { index, period ->
+                        val end = period.end
+                        var expanded by rememberSaveable { mutableStateOf(false) }
+                        Expander(
+                            expanded = expanded,
+                            header = {
+                                InfoBar(
+                                    title = "第 ${index + 1} 节",
+                                    description = "${period.start} - $end",
+                                    indicator = { ExpanderIndicator(expanded) },
+                                    modifier = Modifier
+                                        .clickable { expanded = !expanded }
+                                        .fillMaxWidth()
+                                        .applyInfoBoxPadding()
+                                )
+                            },
+                            modifier = Modifier.animateItem()
+                        ) {
+                            Column {
+                                PeriodEditor("开始时间", period.start.toString()) {
+                                    edit = Edit.Start(index)
                                 }
-                            )
+                                PeriodEditor("结束时间", end.toString()) {
+                                    edit = Edit.End(index)
+                                }
+                                PeriodEditor("持续时间", "${period.duration} 分钟") {
+                                    edit = Edit.Duration(index)
+                                }
+                                HorizontalDivider()
+                                CompositionLocalProvider(
+                                    LocalContentColor provides MaterialTheme.colorScheme.error
+                                ) {
+                                    InfoBar(
+                                        title = "删除时间段",
+                                        description = "长按以删除时间段",
+                                        modifier = Modifier
+                                            .combinedClickable(
+                                                onLongClick = {
+                                                    this@TimingActivity.lifecycleScope.launch {
+                                                        this@TimingActivity.removePeriod(index)
+                                                    }
+                                                }
+                                            ) {
+                                                Toast.makeText(
+                                                    this@TimingActivity,
+                                                    "删除时间段需要长按",
+                                                    Toast.LENGTH_SHORT
+                                                ).show()
+                                            }
+                                            .applyInfoBarPadding(),
+                                        indicator = {
+                                            Indicator(
+                                                icon = Icons.Filled.Delete,
+                                                description = "删除"
+                                            )
+                                        }
+                                    )
+                                }
+                            }
                         }
-                        if (showDialog) {
-                            TimeDialog(
-                                title = "设置开始时间",
-                                initial = Moment(8, 0),
+                    }
+                }
+                when (val action = edit) {
+                    Edit.Append -> {
+                        TimePickerDialog(
+                            initial = Moment(8, 0),
+                            desiredMode = desiredPickerMode,
+                            onConfirm = { moment ->
+                                this.lifecycleScope.launch {
+                                    this@TimingActivity.addPeriod(PeriodRecord(moment, 45))
+                                }
+                                edit = null
+                            },
+                            onDismiss = { edit = null }
+                        ) {
+                            "设置开始时间"
+                        }
+                    }
+
+                    is Edit.Start -> {
+                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        if (period !== null) {
+                            TimePickerDialog(
+                                initial = period.start,
+                                desiredMode = desiredPickerMode,
                                 onConfirm = { moment ->
-                                    scope.launch {
-                                        this@TimingActivity.addPeriod(Period(moment, 45))
-                                        lazyColumnState.animateScrollToItem(SCHEDULE_PERIODS.size)
+                                    this.lifecycleScope.launch {
+                                        this@TimingActivity.updatePeriod(
+                                            action.index,
+                                            period.edit {
+                                                it.copy(
+                                                    start = moment,
+                                                    duration = it.end - moment
+                                                )
+                                            }
+                                        )
                                     }
-                                    showDialog = false
+                                    edit = null
                                 },
-                                onDismiss = { showDialog = false }
+                                onDismiss = { edit = null }
+                            ) {
+                                "设置开始时间"
+                            }
+                        }
+                    }
+
+                    is Edit.End -> {
+                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        if (period !== null) {
+                            TimePickerDialog(
+                                initial = period.end,
+                                desiredMode = desiredPickerMode,
+                                onConfirm = { moment ->
+                                    this.lifecycleScope.launch {
+                                        this@TimingActivity.updatePeriod(
+                                            action.index,
+                                            period.edit {
+                                                it.copy(duration = moment - it.start)
+                                            }
+                                        )
+                                    }
+                                    edit = null
+                                },
+                                onDismiss = { edit = null }
+                            ) {
+                                "设置结束时间"
+                            }
+                        }
+                    }
+
+                    is Edit.Duration -> {
+                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        if (period !== null) {
+                            DurationDialog(
+                                initialDuration = period.duration,
+                                context = this,
+                                onConfirm = { duration ->
+                                    this.lifecycleScope.launch {
+                                        this@TimingActivity.updatePeriod(action.index, period.edit {
+                                            it.copy(duration = duration)
+                                        })
+                                    }
+                                    edit = null
+                                },
+                                onDismiss = { edit = null }
                             )
                         }
                     }
+
+                    else -> {}
                 }
             }
         }
@@ -163,160 +334,6 @@ fun PeriodEditor(
     ) {
         Text(text = value, style = MaterialTheme.typography.bodyMedium)
     }
-}
-
-@Composable
-fun LazyItemScope.PeriodItem(index: Int, holder: PeriodHolder) {
-    val period = holder.period
-    val end = period.start + period.duration
-    val context = LocalContext.current
-    val scope = rememberCoroutineScope()
-    var showStartTimeDialog by remember { mutableStateOf(false) }
-    var showEndTimeDialog by remember { mutableStateOf(false) }
-    var showDurationDialog by remember { mutableStateOf(false) }
-    var expanded by rememberSaveable { mutableStateOf(false) }
-    Expander(
-        expanded = expanded,
-        header = {
-            InfoBar(
-                title = "第 ${index + 1} 节",
-                description = "${period.start} - $end",
-                indicator = { ExpanderIndicator(expanded) },
-                modifier = Modifier
-                    .clickable {
-                        expanded = !expanded
-                    }
-                    .fillMaxWidth()
-                    .applyInfoBoxPadding()
-            )
-        },
-        modifier = Modifier.animateItem()
-    ) {
-        Column {
-            PeriodEditor("开始时间", period.start.toString()) {
-                showStartTimeDialog = true
-            }
-            PeriodEditor("结束时间", end.toString()) {
-                showEndTimeDialog = true
-            }
-            PeriodEditor("持续时间", "${period.duration} 分钟") {
-                showDurationDialog = true
-            }
-            HorizontalDivider()
-            CompositionLocalProvider(
-                LocalContentColor provides MaterialTheme.colorScheme.error
-            ) {
-                InfoBar(
-                    title = "删除时间段",
-                    description = "长按以删除时间段",
-                    modifier = Modifier
-                        .combinedClickable(
-                            onLongClick = {
-                                scope.launch {
-                                    context.removePeriod(index)
-                                }
-                            }
-                        ) {
-                            Toast.makeText(context, "删除时间段需要长按", Toast.LENGTH_SHORT).show()
-                        }
-                        .applyInfoBarPadding(),
-                    indicator = { Indicator(icon = Icons.Filled.Delete, description = "删除") }
-                )
-            }
-        }
-    }
-    if (showStartTimeDialog) {
-        TimeDialog(
-            title = "设置开始时间",
-            initial = period.start,
-            onConfirm = { moment ->
-                scope.launch {
-                    context.updatePeriod(
-                        index,
-                        holder.copy {
-                            it.copy(start = moment, duration = end - moment)
-                        }
-                    )
-                }
-                showStartTimeDialog = false
-            },
-            onDismiss = { showStartTimeDialog = false }
-        )
-    }
-
-    if (showEndTimeDialog) {
-        TimeDialog(
-            title = "设置结束时间",
-            initial = end,
-            onConfirm = { moment ->
-                scope.launch {
-                    context.updatePeriod(
-                        index,
-                        holder.copy {
-                            it.copy(duration = moment - it.start)
-                        }
-                    )
-                }
-                showEndTimeDialog = false
-            },
-            onDismiss = { showEndTimeDialog = false }
-        )
-    }
-
-    if (showDurationDialog) {
-        DurationDialog(
-            initialDuration = period.duration,
-            context = context,
-            onConfirm = { duration ->
-                scope.launch {
-                    context.updatePeriod(index, holder.copy {
-                        it.copy(duration = duration)
-                    })
-                }
-                showDurationDialog = false
-            },
-            onDismiss = { showDurationDialog = false }
-        )
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-fun TimeDialog(
-    title: String,
-    initial: Moment,
-    onConfirm: (Moment) -> Unit,
-    onDismiss: () -> Unit
-) {
-    val timePickerState = rememberTimePickerState(
-        initialHour = initial.hour,
-        initialMinute = initial.minute,
-        is24Hour = true
-    )
-
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(title) },
-        text = {
-            TimePicker(
-                state = timePickerState
-            )
-        },
-        confirmButton = {
-            TextButton(
-                onClick = {
-                    onConfirm(Moment(timePickerState.hour, timePickerState.minute))
-                }
-            ) {
-                Text("确定")
-            }
-        },
-        dismissButton = {
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
-        }
-    )
 }
 
 @Composable
@@ -369,27 +386,25 @@ fun DurationDialog(
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = {
-                    val d = duration.toIntOrNull() ?: 0
-                    if (d > 0) {
-                        if (setAllState) {
-                            scope.launch {
-                                context.setAllDurations(d)
-                            }
-                        } else {
-                            onConfirm(d)
+            TextButton(stringResource(R.string.action_confirm)) {
+                val d = duration.toIntOrNull() ?: 0
+                if (d > 0) {
+                    if (setAllState) {
+                        scope.launch {
+                            context.setAllDurations(d)
                         }
+                    } else {
+                        onConfirm(d)
                     }
                 }
-            ) {
-                Text("确定")
             }
         },
         dismissButton = {
+            TextButton(stringResource(R.string.action_cancel), onClick = onDismiss)
             TextButton(onClick = onDismiss) {
                 Text("取消")
             }
-        }
+        },
+        properties = DialogProperties(dismissOnClickOutside = false)
     )
 }

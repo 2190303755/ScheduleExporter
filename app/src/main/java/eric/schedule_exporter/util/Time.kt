@@ -2,6 +2,7 @@ package eric.schedule_exporter.util
 
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
+import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
@@ -34,7 +35,7 @@ fun StringBuilder.appendTimePart(part: Int): StringBuilder = if (part < 10) {
 
 @Serializable
 @JvmInline
-value class Moment internal constructor(val offset: Int) {
+value class Moment internal constructor(val offset: Int) : Comparable<Moment> {
     constructor(hour: Int, minute: Int) : this(
         floorMod(hour * 60 + minute, MINUTES_PER_DAY)
     )
@@ -49,35 +50,77 @@ value class Moment internal constructor(val offset: Int) {
         .append(':')
         .appendTimePart(this.minute)
         .toString()
-}
 
-@Serializable
-data class Period(val start: Moment, val duration: Int)
+    override fun compareTo(other: Moment): Int = this.offset.compareTo(other.offset)
 
-@OptIn(ExperimentalAtomicApi::class)
-@Serializable(with = PeriodHolder.Companion::class)
-data class PeriodHolder(
-    @Transient
-    val id: Int,
-    val period: Period
-) {
-    constructor(period: Period) : this(COUNTER.fetchAndAdd(1), period)
+    companion object : KSerializer<Moment> {
+        override val descriptor = String.serializer().descriptor
 
-    companion object : KSerializer<PeriodHolder> {
-        override val descriptor: SerialDescriptor = Period.serializer().descriptor
-
-        override fun serialize(encoder: Encoder, value: PeriodHolder) {
-            encoder.encodeSerializableValue(Period.serializer(), value.period)
+        override fun serialize(encoder: Encoder, value: Moment) {
+            encoder.encodeString(value.toString())
         }
 
-        override fun deserialize(decoder: Decoder) = PeriodHolder(
-            decoder.decodeSerializableValue(Period.serializer())
-        )
+        override fun deserialize(decoder: Decoder): Moment {
+            val parts = decoder.decodeString().split(":")
+            require(parts.size == 2) { "Invalid time format" }
+            val hour = parts[0].toInt()
+            require(hour in 0 until 24) { "Invalid hour" }
+            val minute = parts[1].toInt()
+            require(minute in 0 until 60) { "Invalid minute" }
+            return Moment(hour, minute)
+        }
+    }
+}
 
+@Serializable(with = Period.Companion::class)
+sealed interface Period {
+    val start: Moment
+    val duration: Int
+    fun toRecord(): PeriodRecord
+    fun makeUnique(): UniquePeriod
+
+    companion object : KSerializer<Period> {
+        override val descriptor: SerialDescriptor = PeriodRecord.serializer().descriptor
+
+        override fun serialize(encoder: Encoder, value: Period) {
+            encoder.encodeSerializableValue(PeriodRecord.serializer(), value.toRecord())
+        }
+
+        override fun deserialize(decoder: Decoder) = UniquePeriod(
+            decoder.decodeSerializableValue(PeriodRecord.serializer())
+        )
+    }
+}
+
+val Period.end: Moment get() = this.start + this.duration
+
+@Serializable
+data class PeriodRecord(
+    override val start: Moment,
+    override val duration: Int
+) : Period {
+    override fun toRecord() = this
+    override fun makeUnique() = UniquePeriod(this)
+
+}
+
+@OptIn(ExperimentalAtomicApi::class)
+data class UniquePeriod(
+    @Transient
+    val id: Int,
+    val period: PeriodRecord
+) : Period by period {
+    constructor(period: PeriodRecord) : this(COUNTER.fetchAndAdd(1), period)
+
+    override fun toRecord() = this.period
+
+    override fun makeUnique() = this
+
+    companion object {
         @JvmField
         internal val COUNTER: AtomicInt = AtomicInt(0)
     }
 
-    inline fun copy(factory: (Period) -> Period) =
-        PeriodHolder(this.id, factory(this.period))
+    inline fun edit(factory: (PeriodRecord) -> PeriodRecord) =
+        UniquePeriod(this.id, factory(this.period))
 }

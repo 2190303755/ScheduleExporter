@@ -22,6 +22,14 @@ inline fun RequestBody.postTo(
     .apply { configure() }
     .post(this)
 
+inline fun RequestBody.putTo(
+    url: String,
+    configure: Request.Builder.() -> Unit
+): Request.Builder = Request.Builder()
+    .url(url)
+    .apply { configure() }
+    .put(this)
+
 suspend inline fun request(
     factory: () -> Request.Builder
 ): Response = GLOBAL_HTTP_CLIENT.newCall(factory().build()).executeAsync()
