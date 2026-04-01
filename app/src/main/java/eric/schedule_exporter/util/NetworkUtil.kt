@@ -1,11 +1,18 @@
 package eric.schedule_exporter.util
 
+import kotlinx.serialization.json.Json
+import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody
 import okhttp3.Response
 import okhttp3.coroutines.executeAsync
 import java.util.concurrent.TimeUnit
+
+val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
+val NETWORK_JSON = Json {
+    ignoreUnknownKeys = true
+    coerceInputValues = true
+}
 
 val GLOBAL_HTTP_CLIENT: OkHttpClient = OkHttpClient.Builder()
     .connectTimeout(15L, TimeUnit.SECONDS)
@@ -13,22 +20,6 @@ val GLOBAL_HTTP_CLIENT: OkHttpClient = OkHttpClient.Builder()
     .writeTimeout(30L, TimeUnit.SECONDS)
     .callTimeout(60L, TimeUnit.SECONDS)
     .build()
-
-inline fun RequestBody.postTo(
-    url: String,
-    configure: Request.Builder.() -> Unit
-): Request.Builder = Request.Builder()
-    .url(url)
-    .apply { configure() }
-    .post(this)
-
-inline fun RequestBody.putTo(
-    url: String,
-    configure: Request.Builder.() -> Unit
-): Request.Builder = Request.Builder()
-    .url(url)
-    .apply { configure() }
-    .put(this)
 
 suspend inline fun request(
     factory: () -> Request.Builder

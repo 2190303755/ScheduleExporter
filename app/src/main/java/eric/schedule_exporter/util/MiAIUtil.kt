@@ -14,23 +14,17 @@ import kotlinx.serialization.descriptors.PrimitiveSerialDescriptor
 import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
-import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonElement
+import kotlinx.serialization.json.JsonObjectBuilder
 import kotlinx.serialization.json.buildJsonObject
 import kotlinx.serialization.json.encodeToJsonElement
 import kotlinx.serialization.json.put
 import okhttp3.HttpUrl
-import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.Request
+import okhttp3.RequestBody
 import okhttp3.RequestBody.Companion.toRequestBody
 import okhttp3.Response
 import java.io.IOException
-
-val JSON_MEDIA_TYPE = "application/json; charset=utf-8".toMediaType()
-val JSON_CONFIG = Json {
-    ignoreUnknownKeys = true
-    coerceInputValues = true
-}
 
 enum class MiAISource(
     @field:StringRes @param:StringRes val app: Int,
@@ -74,11 +68,11 @@ data class MiAISessionStyle(
             PrimitiveSerialDescriptor("MiAISessionStyle", PrimitiveKind.STRING)
 
         override fun serialize(encoder: Encoder, value: MiAISessionStyle) {
-            encoder.encodeString(JSON_CONFIG.encodeToString(value))
+            encoder.encodeString(NETWORK_JSON.encodeToString(value))
         }
 
         override fun deserialize(decoder: Decoder) =
-            JSON_CONFIG.decodeFromString<MiAISessionStyle>(decoder.decodeString())
+            NETWORK_JSON.decodeFromString<MiAISessionStyle>(decoder.decodeString())
 
         @JvmField
         val BUILTIN_STYLES = listOf(
@@ -139,7 +133,7 @@ data class MiAIScheduleConfig(
 ) {
     fun applyTimeTable(periods: List<MiAIPeriod>): MiAIScheduleConfig {
         return this.copy(
-            sections = JSON_CONFIG.encodeToString(periods),
+            sections = NETWORK_JSON.encodeToString(periods),
             sectionTimes = null
         )
     }
@@ -211,22 +205,39 @@ data class MiAIContext(
         }
         request.header("Authorization", this.authorization)
     }
-
-    inline fun fetch(
-        path: String,
-        queries: HttpUrl.Builder.() -> Unit = {}
-    ): Request.Builder = Request.Builder().url(
-        HttpUrl.Builder()
-            .scheme("https")
-            .host(this.source.host)
-            .addEncodedPathSegment("course-multi-auth")
-            .addPathSegments(path)
-            .addQueryParameter("requestId", randomUniqueString())
-            .addQueryParameter("sourceName", this.source.alias)
-            .apply { queries() }
-            .toString()
-    ).apply(this::appendHeaders)
 }
+
+fun MiAIContext.staticUrl(path: String): HttpUrl.Builder = HttpUrl.Builder()
+    .scheme("https")
+    .host(this.source.host)
+    .addEncodedPathSegment("course-multi-auth")
+    .addPathSegments(path)
+
+inline fun MiAIContext.fetch(
+    path: String,
+    queries: HttpUrl.Builder.() -> Unit = {}
+): Request.Builder = Request.Builder().url(
+    this.staticUrl(path)
+        .addQueryParameter("requestId", randomUniqueString())
+        .addQueryParameter("sourceName", this.source.alias)
+        .apply(queries)
+        .toString()
+).apply(this::appendHeaders)
+
+inline fun MiAIContext.fetchWithJson(
+    path: String,
+    method: Request.Builder.(RequestBody) -> Request.Builder = Request.Builder::post,
+    body: JsonObjectBuilder.() -> Unit
+): Request.Builder = Request.Builder().url(
+    this.staticUrl(path).toString()
+).apply(this::appendHeaders).method(
+    NETWORK_JSON.encodeToString(
+        buildJsonObject {
+            put("sourceName", this@fetchWithJson.source.alias)
+            body()
+        }
+    ).toRequestBody(JSON_MEDIA_TYPE)
+)
 
 @Serializable
 data class MiAIScheduleResponse<T>(
@@ -254,7 +265,7 @@ inline fun <reified T> Response.resolveMiAIScheduleResponse(fallback: () -> T): 
     if (!it.isSuccessful) throw IOException("HTTP ${it.code}: ${it.message}")
     val body = it.body.string()
     val response = try {
-        JSON_CONFIG.decodeFromString<MiAIScheduleResponse<T>>(body)
+        NETWORK_JSON.decodeFromString<MiAIScheduleResponse<T>>(body)
     } catch (e: Exception) {
         Log.e("MiAIHandler", "Failed to decoded: $body", e)
         throw IllegalArgumentException("Failed to parse JSON", e)
@@ -263,19 +274,15 @@ inline fun <reified T> Response.resolveMiAIScheduleResponse(fallback: () -> T): 
     response.data ?: fallback()
 }
 
-suspend fun MiAIContext.listSchedules() = request {
-    this.fetch("table")
-}.resolveMiAIScheduleResponse { listOf<MiAIScheduleMeta>() }
+suspend fun MiAIContext.listSchedules(): List<MiAIScheduleMeta> = request {
+    this.fetch("tables")
+}.resolveMiAIScheduleResponse { emptyList() }
 
 suspend fun MiAIContext.createSchedule(name: String): Long = request {
-    JSON_CONFIG.encodeToString(buildJsonObject {
+    this.fetchWithJson("table", Request.Builder::post) {
         put("name", name)
         put("current", 0)
-        put("sourceName", this@createSchedule.source.alias)
-    }).toRequestBody(JSON_MEDIA_TYPE).postTo(
-        "https://${this.source.host}/course-multi-auth/table",
-        this::appendHeaders
-    )
+    }
 }.resolveMiAIScheduleResponse { 0L }
 
 suspend fun MiAIContext.querySchedule(schedule: Long) = request {
@@ -290,38 +297,26 @@ suspend fun MiAIContext.configureSchedule(
     details: MiAIScheduleDetails,
     periods: List<MiAIPeriod>
 ): Boolean = request {
-    JSON_CONFIG.encodeToString(buildJsonObject {
+    this.fetchWithJson("table", Request.Builder::put) {
         put("ctId", details.id)
         put("name", details.name)
-        put("setting", JSON_CONFIG.encodeToJsonElement(details.setting.applyTimeTable(periods)))
-        put("sourceName", this@configureSchedule.source.alias)
-    }).toRequestBody(JSON_MEDIA_TYPE).putTo(
-        "https://${this.source.host}/course-multi-auth/table",
-        this::appendHeaders
-    )
+        put("setting", NETWORK_JSON.encodeToJsonElement(details.setting.applyTimeTable(periods)))
+    }
 }.resolveMiAIScheduleResponse { false }
 
 suspend fun MiAIContext.switchSchedule(old: Long, neo: Long): Boolean = request {
-    JSON_CONFIG.encodeToString(buildJsonObject {
+    this.fetchWithJson("table_switch", Request.Builder::post) {
         put("fromCtId", old)
         put("toCtId", neo)
-        put("sourceName", this@switchSchedule.source.alias)
-    }).toRequestBody(JSON_MEDIA_TYPE).postTo(
-        "https://${this.source.host}/course-multi-auth/table_switch",
-        this::appendHeaders
-    )
+    }
 }.resolveMiAIScheduleResponse { false }
 
 suspend fun MiAIContext.uploadSessions(
     schedule: Long,
     sessions: Either<List<MiAISession>, JsonElement>
 ): List<Int> = request {
-    JSON_CONFIG.encodeToString(buildJsonObject {
+    this.fetchWithJson("courseInfos", Request.Builder::post) {
         put("ctId", schedule)
-        put("courses", sessions.mapLeft(JSON_CONFIG::encodeToJsonElement).unbox())
-        put("sourceName", this@uploadSessions.source.alias)
-    }).toRequestBody(JSON_MEDIA_TYPE).postTo(
-        "https://${this.source.host}/course-multi-auth/courseInfos",
-        this::appendHeaders
-    )
+        put("courses", sessions.mapLeft(NETWORK_JSON::encodeToJsonElement).unbox())
+    }
 }.resolveMiAIScheduleResponse { emptyList() }

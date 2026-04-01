@@ -68,12 +68,12 @@ import eric.schedule_exporter.ui.TextButton
 import eric.schedule_exporter.ui.TooltipBox
 import eric.schedule_exporter.ui.applyInfoBarPadding
 import eric.schedule_exporter.util.Either
-import eric.schedule_exporter.util.JSON_CONFIG
 import eric.schedule_exporter.util.MiAIContext
 import eric.schedule_exporter.util.MiAIDebugInfo
 import eric.schedule_exporter.util.MiAIPeriod
 import eric.schedule_exporter.util.MiAISessionStyle
 import eric.schedule_exporter.util.MiAISource
+import eric.schedule_exporter.util.NETWORK_JSON
 import eric.schedule_exporter.util.Session
 import eric.schedule_exporter.util.collectText
 import eric.schedule_exporter.util.configureSchedule
@@ -94,7 +94,7 @@ import java.io.OutputStream
 fun String?.resolveContext(): Result<MiAIContext?> = if (this.isNullOrBlank()) {
     Result.success(null)
 } else runCatching {
-    JSON_CONFIG.decodeFromString<MiAIDebugInfo>(this).buildContext()
+    NETWORK_JSON.decodeFromString<MiAIDebugInfo>(this).buildContext()
 }
 
 object MiAIHandler : ScheduleHandler<JsonElement> {
@@ -108,7 +108,7 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
     override fun convert(sessions: Map<Session, IntSet>): JsonElement {
         var index = 0
         val styles = hashMapOf<String, MiAISessionStyle>()
-        return JSON_CONFIG.encodeToJsonElement(
+        return NETWORK_JSON.encodeToJsonElement(
             sessions.map {
                 it.key.toMiAISession(it.value, styles.getOrPut(it.key.subject) {
                     val style = MiAISessionStyle.BUILTIN_STYLES[index]
@@ -121,7 +121,7 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
 
     @OptIn(ExperimentalSerializationApi::class)
     override fun serialize(sessions: JsonElement, stream: OutputStream) {
-        JSON_CONFIG.encodeToStream(sessions, stream)
+        NETWORK_JSON.encodeToStream(sessions, stream)
     }
 
     override suspend fun export(data: JsonElement, context: Context) {
