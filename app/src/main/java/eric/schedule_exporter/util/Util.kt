@@ -14,6 +14,8 @@ import org.apache.commons.text.StringEscapeUtils
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
 
+fun Boolean.asFloat(): Float = if (this) 1.0F else 0.0F
+
 inline fun <reified T> Iterator<T>.skip(): Boolean {
     if (this.hasNext()) {
         this.next()

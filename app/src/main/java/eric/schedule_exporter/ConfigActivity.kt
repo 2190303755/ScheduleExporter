@@ -15,8 +15,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
-import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipAnchorPosition
@@ -39,6 +37,7 @@ import eric.schedule_exporter.data.setScheduleParser
 import eric.schedule_exporter.handler.HandlerType
 import eric.schedule_exporter.parser.ParserType
 import eric.schedule_exporter.ui.DropdownMenuChip
+import eric.schedule_exporter.ui.IconButton
 import eric.schedule_exporter.ui.InfoBar
 import eric.schedule_exporter.ui.InfoBox
 import eric.schedule_exporter.ui.TooltipBox
@@ -61,9 +60,9 @@ class ConfigActivity : ComponentActivity() {
                         scrollBehavior = scrollBehavior,
                         title = { Text(stringResource(R.string.activity_config)) },
                         navigationIcon = {
-                            TooltipBox("返回", TooltipAnchorPosition.Below) {
-                                IconButton(onClick = { this.finish() }) {
-                                    Icon(Icons.AutoMirrored.Filled.ArrowBack, it)
+                            TooltipBox("返回", TooltipAnchorPosition.Below) { tooltip ->
+                                IconButton(Icons.AutoMirrored.Filled.ArrowBack, tooltip) {
+                                    this.finish()
                                 }
                             }
                         }

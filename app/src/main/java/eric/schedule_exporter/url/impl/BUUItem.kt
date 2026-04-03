@@ -12,7 +12,6 @@ import java.net.InetAddress
 object BUUItem : UrlItem {
     const val DIRECT = "https://jwxt.buu.edu.cn"
     const val WEB_VPN = "https://wvpn.buu.edu.cn"
-    var isInCampus: Boolean = false
     override val name: String
         get() = "北京联合大学"
     override var url: String by mutableStateOf(WEB_VPN)

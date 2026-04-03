@@ -35,7 +35,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.material3.TimePickerDisplayMode
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TopAppBar
@@ -401,9 +400,6 @@ fun DurationDialog(
         },
         dismissButton = {
             TextButton(stringResource(R.string.action_cancel), onClick = onDismiss)
-            TextButton(onClick = onDismiss) {
-                Text("取消")
-            }
         },
         properties = DialogProperties(dismissOnClickOutside = false)
     )

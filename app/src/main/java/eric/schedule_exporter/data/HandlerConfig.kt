@@ -77,5 +77,4 @@ sealed interface HandlerSpec
 @Serializable
 @SerialName("miai")
 @JvmInline
-value class MiAISpec(val miai: MiAIContext) : HandlerSpec {
-}
+value class MiAISpec(val miai: MiAIContext) : HandlerSpec

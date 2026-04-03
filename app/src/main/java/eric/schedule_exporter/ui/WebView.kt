@@ -26,6 +26,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
 import eric.schedule_exporter.util.DUMPER_NAME
+import eric.schedule_exporter.util.Dump
 import eric.schedule_exporter.util.randomUniqueString
 import eric.schedule_exporter.util.resolveLayoutParams
 
@@ -81,10 +82,10 @@ class WebViewContext : WebViewClient() {
         internal set
     var title: String by mutableStateOf("")
         internal set
-    var destination: String by mutableStateOf("")
+    var location: String by mutableStateOf("")
         internal set
     val errors: SnapshotStateList<WebViewError> = mutableStateListOf()
-    val reports = mutableMapOf<String, List<eric.schedule_exporter.util.Dump>>()
+    val reports = mutableMapOf<String, List<Dump>>()
 
     @Suppress("unused")
     @JavascriptInterface
@@ -95,7 +96,7 @@ class WebViewContext : WebViewClient() {
     @Suppress("unused")
     @JavascriptInterface
     fun dump(uuid: String, url: String, html: String?) {
-        val dump = eric.schedule_exporter.util.Dump(url, html ?: "! NO ACCESS !")
+        val dump = Dump(url, html ?: "! NO ACCESS !")
         val existing = reports[uuid] ?: emptyList()
         reports[uuid] = existing + dump
     }
@@ -117,7 +118,7 @@ class WebViewContext : WebViewClient() {
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {
         this.errors.clear()
         if (url !== null) {
-            this.destination = url
+            this.location = url
         }
     }
 
