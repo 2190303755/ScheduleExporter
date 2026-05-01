@@ -53,10 +53,12 @@ import androidx.compose.ui.platform.toClipEntry
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
+import eric.schedule_exporter.ExportMethod
+import eric.schedule_exporter.Exporter
 import eric.schedule_exporter.R
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PERIODS
 import eric.schedule_exporter.data.HandlerSpec
 import eric.schedule_exporter.data.MiAISpec
+import eric.schedule_exporter.data.periodConfig
 import eric.schedule_exporter.data.setScheduleHandler
 import eric.schedule_exporter.handler.HandlerType
 import eric.schedule_exporter.handler.ScheduleHandler
@@ -66,6 +68,7 @@ import eric.schedule_exporter.ui.Indicator
 import eric.schedule_exporter.ui.InfoBar
 import eric.schedule_exporter.ui.TextButton
 import eric.schedule_exporter.ui.TooltipBox
+import eric.schedule_exporter.ui.WebViewContext
 import eric.schedule_exporter.ui.applyInfoBarPadding
 import eric.schedule_exporter.util.Either
 import eric.schedule_exporter.util.MiAIContext
@@ -83,6 +86,7 @@ import eric.schedule_exporter.util.querySchedule
 import eric.schedule_exporter.util.toMiAISession
 import eric.schedule_exporter.util.uploadSessions
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
@@ -95,6 +99,56 @@ fun String?.resolveContext(): Result<MiAIContext?> = if (this.isNullOrBlank()) {
     Result.success(null)
 } else runCatching {
     NETWORK_JSON.decodeFromString<MiAIDebugInfo>(this).buildContext()
+}
+
+@JvmInline
+value class MiAIUploader(
+    val name: String
+) : ExportMethod<JsonElement> {
+    override suspend fun export(data: JsonElement, context: Context) {
+        val miai = MiAIHandler.miai ?: return
+        withContext(Dispatchers.IO) {
+            try {
+                val name = "schedule"
+                val schedule = miai.createSchedule(name)
+                require(schedule != 0L) {
+                    "Failed to create schedule"
+                }
+                val detail = miai.querySchedule(schedule)
+                if (miai.configureSchedule(
+                        detail,
+                        context.periodConfig
+                            .data
+                            .first()
+                            .sortedBy { it.start }
+                            .mapIndexed { index, period ->
+                                MiAIPeriod(
+                                    index = index + 1,
+                                    start = period.start,
+                                    end = period.end
+                                )
+                            }
+                    )
+                ) {
+                    val ids = miai.uploadSessions(schedule, Either.Right(data))
+                    Log.d("MiAIHandler", "Upload ${ids.size} session(s)")
+                }
+            } catch (e: Exception) {
+                Log.e("MiAIHandler", "Failed to upload", e)
+                withContext(Dispatchers.Main) {
+                    Toast.makeText(context, e.message ?: "未知错误", Toast.LENGTH_SHORT).show()
+                }
+            }
+        }
+    }
+
+    override fun formatName(id: String) = MiAIHandler.formatName(id)
+
+    override fun convert(sessions: Map<Session, IntSet>) = MiAIHandler.convert(sessions)
+
+    override fun serialize(sessions: JsonElement, stream: OutputStream) {
+        MiAIHandler.serialize(sessions, stream)
+    }
 }
 
 object MiAIHandler : ScheduleHandler<JsonElement> {
@@ -124,41 +178,6 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
         NETWORK_JSON.encodeToStream(sessions, stream)
     }
 
-    override suspend fun export(data: JsonElement, context: Context) {
-        val miai = this.miai ?: return
-        withContext(Dispatchers.IO) {
-            try {
-                val name = "schedule"
-                val schedule = miai.createSchedule(name)
-                require(schedule != 0L) {
-                    "Failed to create schedule"
-                }
-                val detail = miai.querySchedule(schedule)
-                if (miai.configureSchedule(
-                        detail,
-                        SCHEDULE_PERIODS
-                            .sortedBy { it.period.start }
-                            .mapIndexed { index, period ->
-                                MiAIPeriod(
-                                    index = index + 1,
-                                    start = period.start,
-                                    end = period.end
-                                )
-                            }
-                    )
-                ) {
-                    val ids = miai.uploadSessions(schedule, Either.Right(data))
-                    Log.d("MiAIHandler", "Upload ${ids.size} session(s)")
-                }
-            } catch (e: Exception) {
-                Log.e("MiAIHandler", "Failed to upload", e)
-                withContext(Dispatchers.Main) {
-                    Toast.makeText(context, e.message ?: "未知错误", Toast.LENGTH_SHORT).show()
-                }
-            }
-        }
-    }
-
     override suspend fun loadSpec(config: HandlerSpec?): Boolean {
         if (config is MiAISpec) {
             this.miai = config.miai
@@ -170,6 +189,9 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
     override suspend fun saveSpec(): MiAISpec? {
         return MiAISpec(this.miai ?: return null)
     }
+
+    @Composable
+    override fun displayName() = stringResource(R.string.app_miai)
 
     @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
     @Composable
@@ -212,7 +234,7 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
                 )
             }
             LaunchedEffect(Unit) {
-                context.setScheduleHandler(MiAIHandler)
+                context.setScheduleHandler(HandlerType.MIAI_HANDLER)
             }
         }
         if (requireInfo) {
@@ -367,7 +389,7 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
                         label = { Text("用户代理") },
                         lineLimits = TextFieldLineLimits.SingleLine,
                         trailingIcon = {
-                            TooltipBox("Clear") { tooltip ->
+                            TooltipBox(stringResource(R.string.clear_text)) { tooltip ->
                                 IconButton(Icons.Filled.Clear, tooltip) {
                                     userAgent.clearText()
                                 }
@@ -380,5 +402,67 @@ object MiAIHandler : ScheduleHandler<JsonElement> {
     }
 
     @Composable
-    override fun displayName() = stringResource(R.string.app_miai)
+    override fun Popup(exporter: Exporter, webViewContext: WebViewContext) {
+        val context = LocalContext.current
+        val clipboard = LocalClipboard.current
+        val schedule = rememberTextFieldState("")
+        val coroutineScope = rememberCoroutineScope()
+        AlertDialog(
+            onDismissRequest = { exporter.viewModel.currentPopup = null },
+            title = { Text("课程表名称") },
+            neutralButton = {
+                TextButton("粘贴") {
+                    coroutineScope.launch {
+                        clipboard.getClipEntry()
+                            ?.clipData
+                            ?.collectText()
+                            .let {
+                                if (it.isNullOrBlank()) {
+                                    Toast.makeText(
+                                        context,
+                                        "剪切板为空",
+                                        Toast.LENGTH_SHORT
+                                    ).show()
+                                } else {
+                                    schedule.setTextAndPlaceCursorAtEnd(it)
+                                }
+                            }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton("继续", !schedule.text.isBlank()) {
+                    exporter.viewModel.currentPopup = null
+                    coroutineScope.launch {
+                        exporter.parseAndExport(
+                            webViewContext,
+                            MiAIUploader(schedule.text.toString())
+                        )
+                    }
+                }
+            },
+            dismissButton = {
+                TextButton("取消") {
+                    exporter.viewModel.currentPopup = null
+                }
+            },
+            properties = DialogProperties(dismissOnClickOutside = false)
+        ) {
+            OutlinedTextField(
+                state = schedule,
+                lineLimits = TextFieldLineLimits.SingleLine,
+                trailingIcon = {
+                    TooltipBox(stringResource(R.string.clear_text)) { tooltip ->
+                        IconButton(Icons.Filled.Clear, tooltip) {
+                            schedule.clearText()
+                        }
+                    }
+                }
+            )
+        }
+    }
+
+    override suspend fun parseAndExport(exporter: Exporter, webViewContext: WebViewContext) {
+        exporter.viewModel.currentPopup = HandlerType.MIAI_HANDLER
+    }
 }

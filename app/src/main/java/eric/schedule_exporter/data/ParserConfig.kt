@@ -5,11 +5,7 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PARSER
 import eric.schedule_exporter.parser.ParserType
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.SerializationException
@@ -23,17 +19,6 @@ val Context.parserConfig: DataStore<ParserConfig> by dataStore(
     fileName = "ParserConfig.json",
     serializer = ParserConfig
 )
-
-suspend fun Context.setScheduleParser(parser: ParserType) {
-    withContext(Dispatchers.Main) {
-        SCHEDULE_PARSER = parser
-    }
-    withContext(NonCancellable + Dispatchers.IO) {
-        parserConfig.updateData {
-            ParserConfig(SCHEDULE_PARSER)
-        }
-    }
-}
 
 @JvmInline
 @Serializable

@@ -8,33 +8,33 @@ import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.plus
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.ExperimentalMaterial3ExpressiveApi
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TooltipAnchorPosition
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
-import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.input.nestedscroll.nestedScroll
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_HANDLER
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PARSER
-import eric.schedule_exporter.data.setScheduleParser
+import androidx.lifecycle.lifecycleScope
+import eric.schedule_exporter.data.ParserConfig
+import eric.schedule_exporter.data.parserConfig
 import eric.schedule_exporter.handler.HandlerType
+import eric.schedule_exporter.model.ConfigViewModel
 import eric.schedule_exporter.parser.ParserType
 import eric.schedule_exporter.ui.DropdownMenuChip
 import eric.schedule_exporter.ui.IconButton
@@ -45,6 +45,7 @@ import eric.schedule_exporter.ui.applyInfoBoxPadding
 import eric.schedule_exporter.ui.fadeInAndExpandVertically
 import eric.schedule_exporter.ui.fadeOutAndShrinkVertically
 import eric.schedule_exporter.ui.theme.setThemedContent
+import kotlinx.coroutines.launch
 
 class ConfigActivity : ComponentActivity() {
     @OptIn(ExperimentalMaterial3Api::class)
@@ -52,6 +53,7 @@ class ConfigActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         this.enableEdgeToEdge()
         this.setThemedContent {
+            val viewModel = remember { ConfigViewModel(this) }
             val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
             Scaffold(
                 modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
@@ -71,74 +73,76 @@ class ConfigActivity : ComponentActivity() {
             ) { innerPadding ->
                 LazyColumn(
                     contentPadding = innerPadding + PaddingValues(16.dp),
-                    verticalArrangement = Arrangement.spacedBy(8.dp)
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     item {
-                        ParserTypeSection()
+                        val current = viewModel.parserConfig.collectAsState(ParserConfig())
+                        InfoBox {
+                            InfoBar(
+                                title = "课程表解析器",
+                                modifier = Modifier
+                                    .applyInfoBoxPadding()
+                                    .fillMaxWidth()
+                            ) {
+                                DropdownMenuChip(
+                                    options = ParserType.entries,
+                                    selected = current.value.parser,
+                                    onSelect = { parser ->
+                                        lifecycleScope.launch {
+                                            this@ConfigActivity.parserConfig.updateData {
+                                                ParserConfig(parser)
+                                            }
+                                        }
+                                    },
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    stringResource(it.text)
+                                }
+                            }
+                        }
                     }
                     item {
-                        HandlerTypeSection()
+                        val effective = viewModel.effectiveHandler.collectAsState(
+                            HandlerType.WAKE_UP_HANDLER
+                        )
+                        val selected = rememberSaveable {
+                            mutableStateOf<HandlerType?>(null)
+                        }
+                        LaunchedEffect(effective.value) {
+                            selected.value = effective.value
+                        }
+                        InfoBox {
+                            InfoBar(
+                                title = "课程表处理器",
+                                modifier = Modifier
+                                    .applyInfoBoxPadding()
+                                    .fillMaxWidth()
+                            ) {
+                                DropdownMenuChip(
+                                    options = HandlerType.entries,
+                                    selected = selected.value ?: HandlerType.WAKE_UP_HANDLER,
+                                    onSelect = selected.component2(),
+                                    modifier = Modifier.fillMaxWidth()
+                                ) {
+                                    it.handler.displayName()
+                                }
+                            }
+                            AnimatedContent(
+                                targetState = selected.value,
+                                transitionSpec = {
+                                    fadeInAndExpandVertically togetherWith fadeOutAndShrinkVertically
+                                },
+                                contentAlignment = Alignment.TopCenter
+                            ) {
+                                Column(Modifier.fillMaxWidth()) {
+                                    it?.handler?.ConfigSection {
+                                        selected.value = effective.value
+                                    }
+                                }
+                            }
+                        }
                     }
-                }
-            }
-        }
-    }
-}
-
-@OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-fun ParserTypeSection() {
-    InfoBox {
-        val context = LocalContext.current
-        val selected = remember { mutableStateOf(SCHEDULE_PARSER) }
-        LaunchedEffect(selected.value) {
-            context.setScheduleParser(selected.value)
-        }
-        InfoBar(
-            title = "课程表解析器",
-            modifier = Modifier
-                .applyInfoBoxPadding()
-                .fillMaxWidth()
-        ) {
-            DropdownMenuChip(
-                selected = selected,
-                options = ParserType.entries,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                stringResource(it.text)
-            }
-        }
-    }
-}
-
-@Composable
-fun HandlerTypeSection() {
-    val selected = rememberSaveable { mutableStateOf(SCHEDULE_HANDLER.type) }
-    InfoBox(Modifier.fillMaxWidth()) {
-        InfoBar(
-            title = "课程表处理器",
-            modifier = Modifier
-                .applyInfoBoxPadding()
-                .fillMaxWidth()
-        ) {
-            DropdownMenuChip(
-                selected = selected,
-                options = HandlerType.entries,
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                it.handler.displayName()
-            }
-        }
-        AnimatedContent(
-            targetState = selected.value,
-            transitionSpec = {
-                fadeInAndExpandVertically togetherWith fadeOutAndShrinkVertically
-            },
-            contentAlignment = Alignment.TopCenter
-        ) {
-            Column(Modifier.fillMaxWidth()) {
-                it.handler.ConfigSection {
-                    selected.value = SCHEDULE_HANDLER.type
                 }
             }
         }

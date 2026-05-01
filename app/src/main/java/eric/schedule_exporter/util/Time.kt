@@ -3,13 +3,11 @@ package eric.schedule_exporter.util
 import kotlinx.serialization.KSerializer
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.serializer
-import kotlinx.serialization.descriptors.SerialDescriptor
 import kotlinx.serialization.encoding.Decoder
 import kotlinx.serialization.encoding.Encoder
 import java.lang.Math.floorMod
 import java.time.DayOfWeek
-import kotlin.concurrent.atomics.AtomicInt
-import kotlin.concurrent.atomics.ExperimentalAtomicApi
+import java.util.UUID
 
 const val MINUTES_PER_HOUR = 60
 const val HOURS_PER_DAY = 24
@@ -72,55 +70,34 @@ value class Moment internal constructor(val offset: Int) : Comparable<Moment> {
     }
 }
 
-@Serializable(with = Period.Companion::class)
 sealed interface Period {
     val start: Moment
     val duration: Int
-    fun toRecord(): PeriodRecord
-    fun makeUnique(): UniquePeriod
-
-    companion object : KSerializer<Period> {
-        override val descriptor: SerialDescriptor = PeriodRecord.serializer().descriptor
-
-        override fun serialize(encoder: Encoder, value: Period) {
-            encoder.encodeSerializableValue(PeriodRecord.serializer(), value.toRecord())
-        }
-
-        override fun deserialize(decoder: Decoder) = UniquePeriod(
-            decoder.decodeSerializableValue(PeriodRecord.serializer())
-        )
-    }
 }
 
-val Period.end: Moment get() = this.start + this.duration
+val Period.end: Moment
+    get() = this.start + this.duration
 
-@Serializable
 data class PeriodRecord(
     override val start: Moment,
     override val duration: Int
-) : Period {
-    override fun toRecord() = this
-    override fun makeUnique() = UniquePeriod(this)
+) : Period
 
-}
-
-@OptIn(ExperimentalAtomicApi::class)
+@Serializable
 data class UniquePeriod(
-    @Transient
-    val id: Int,
-    val period: PeriodRecord
-) : Period by period {
-    constructor(period: PeriodRecord) : this(COUNTER.fetchAndAdd(1), period)
+    override val start: Moment,
+    override val duration: Int,
+    @Serializable(with = UUIDSerializer::class)
+    val id: UUID
+) : Period
 
-    override fun toRecord() = this.period
-
-    override fun makeUnique() = this
-
-    companion object {
-        @JvmField
-        internal val COUNTER: AtomicInt = AtomicInt(0)
+@JvmInline
+value class UniquePeriodBuilderScope(val occupied: Set<UUID> = hashSetOf()) {
+    infix fun Moment.lastFor(duration: Int): UniquePeriod {
+        var uuid: UUID
+        do {
+            uuid = UUID.randomUUID()
+        } while (uuid in occupied)
+        return UniquePeriod(this, duration, uuid)
     }
-
-    inline fun edit(factory: (PeriodRecord) -> PeriodRecord) =
-        UniquePeriod(this.id, factory(this.period))
 }

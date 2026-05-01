@@ -11,7 +11,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.fillMaxHeight
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.plus
@@ -34,6 +34,9 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarDuration
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.material3.TimePickerDisplayMode
 import androidx.compose.material3.TooltipAnchorPosition
@@ -42,6 +45,7 @@ import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.MutableState
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -57,11 +61,7 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.DialogProperties
 import androidx.lifecycle.lifecycleScope
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PERIODS
-import eric.schedule_exporter.data.addPeriod
-import eric.schedule_exporter.data.removePeriod
-import eric.schedule_exporter.data.setAllDurations
-import eric.schedule_exporter.data.updatePeriod
+import eric.schedule_exporter.model.TimingViewModel
 import eric.schedule_exporter.ui.Expander
 import eric.schedule_exporter.ui.ExpanderIndicator
 import eric.schedule_exporter.ui.IconButton
@@ -72,6 +72,7 @@ import eric.schedule_exporter.ui.TimePickerDialog
 import eric.schedule_exporter.ui.TooltipBox
 import eric.schedule_exporter.ui.applyInfoBarPadding
 import eric.schedule_exporter.ui.applyInfoBoxPadding
+import eric.schedule_exporter.ui.showSnackbar
 import eric.schedule_exporter.ui.theme.setThemedContent
 import eric.schedule_exporter.util.Moment
 import eric.schedule_exporter.util.PeriodRecord
@@ -127,6 +128,7 @@ class TimingActivity : ComponentActivity() {
             var edit by rememberSaveable(saver = EditSaver) { mutableStateOf(null) }
             val desiredPickerMode = remember { mutableStateOf(TimePickerDisplayMode.Picker) }
             val scrollBehavior = TopAppBarDefaults.pinnedScrollBehavior()
+            val snackbarHostState = remember { SnackbarHostState() }
             Scaffold(
                 modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 topBar = {
@@ -142,6 +144,7 @@ class TimingActivity : ComponentActivity() {
                         }
                     )
                 },
+                snackbarHost = { SnackbarHost(snackbarHostState) },
                 floatingActionButton = {
                     FloatingActionButton(
                         onClick = { edit = Edit.Append },
@@ -151,15 +154,17 @@ class TimingActivity : ComponentActivity() {
                     }
                 }
             ) { innerPadding ->
+                val viewModel = remember { TimingViewModel(this) }
+                val periods by viewModel.periods.collectAsState(emptyList())
                 val lazyColumnState = rememberLazyListState()
                 LazyColumn(
                     state = lazyColumnState,
                     contentPadding = innerPadding + PaddingValues(16.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxHeight()
+                    modifier = Modifier.fillMaxSize()
                 ) {
                     itemsIndexed(
-                        SCHEDULE_PERIODS,
+                        periods,
                         key = { _, period -> period.id }
                     ) { index, period ->
                         val end = period.end
@@ -199,8 +204,16 @@ class TimingActivity : ComponentActivity() {
                                         modifier = Modifier
                                             .combinedClickable(
                                                 onLongClick = {
-                                                    this@TimingActivity.lifecycleScope.launch {
-                                                        this@TimingActivity.removePeriod(index)
+                                                    lifecycleScope.launch {
+                                                        viewModel.removePeriod(index)
+                                                        snackbarHostState.currentSnackbarData?.dismiss()
+                                                        snackbarHostState.showSnackbar(
+                                                            message = "已删除时间段",
+                                                            actionLabel = "撤销",
+                                                            duration = SnackbarDuration.Long
+                                                        ) {
+                                                            viewModel.insertPeriod(index, period)
+                                                        }
                                                     }
                                                 }
                                             ) {
@@ -229,8 +242,8 @@ class TimingActivity : ComponentActivity() {
                             initial = Moment(8, 0),
                             desiredMode = desiredPickerMode,
                             onConfirm = { moment ->
-                                this.lifecycleScope.launch {
-                                    this@TimingActivity.addPeriod(PeriodRecord(moment, 45))
+                                lifecycleScope.launch {
+                                    viewModel.appendPeriod(PeriodRecord(moment, 45))
                                 }
                                 edit = null
                             },
@@ -241,21 +254,19 @@ class TimingActivity : ComponentActivity() {
                     }
 
                     is Edit.Start -> {
-                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        val period = periods.getOrNull(action.index)
                         if (period !== null) {
                             TimePickerDialog(
                                 initial = period.start,
                                 desiredMode = desiredPickerMode,
                                 onConfirm = { moment ->
-                                    this.lifecycleScope.launch {
-                                        this@TimingActivity.updatePeriod(
+                                    lifecycleScope.launch {
+                                        viewModel.updatePeriod(
                                             action.index,
-                                            period.edit {
-                                                it.copy(
-                                                    start = moment,
-                                                    duration = it.end - moment
-                                                )
-                                            }
+                                            period.copy(
+                                                start = moment,
+                                                duration = period.end - moment
+                                            )
                                         )
                                     }
                                     edit = null
@@ -268,18 +279,16 @@ class TimingActivity : ComponentActivity() {
                     }
 
                     is Edit.End -> {
-                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        val period = periods.getOrNull(action.index)
                         if (period !== null) {
                             TimePickerDialog(
                                 initial = period.end,
                                 desiredMode = desiredPickerMode,
                                 onConfirm = { moment ->
-                                    this.lifecycleScope.launch {
-                                        this@TimingActivity.updatePeriod(
+                                    lifecycleScope.launch {
+                                        viewModel.updatePeriod(
                                             action.index,
-                                            period.edit {
-                                                it.copy(duration = moment - it.start)
-                                            }
+                                            period.copy(duration = moment - period.start)
                                         )
                                     }
                                     edit = null
@@ -292,18 +301,22 @@ class TimingActivity : ComponentActivity() {
                     }
 
                     is Edit.Duration -> {
-                        val period = SCHEDULE_PERIODS.getOrNull(action.index)
+                        val period = periods.getOrNull(action.index)
                         if (period !== null) {
                             DurationDialog(
                                 initialDuration = period.duration,
-                                context = this,
-                                onConfirm = { duration ->
-                                    this.lifecycleScope.launch {
-                                        this@TimingActivity.updatePeriod(action.index, period.edit {
-                                            it.copy(duration = duration)
-                                        })
+                                onConfirm = { unify, duration ->
+                                    lifecycleScope.launch {
+                                        if (unify) {
+                                            viewModel.unifyDuration(duration)
+                                        } else {
+                                            viewModel.updatePeriod(
+                                                action.index,
+                                                period.copy(duration = duration)
+                                            )
+                                        }
+                                        edit = null
                                     }
-                                    edit = null
                                 },
                                 onDismiss = { edit = null }
                             )
@@ -321,13 +334,13 @@ class TimingActivity : ComponentActivity() {
 fun PeriodEditor(
     title: String,
     value: String,
-    onCLick: () -> Unit
+    onClick: () -> Unit
 ) {
     HorizontalDivider()
     InfoBar(
         title = title,
         modifier = Modifier
-            .clickable(onClick = onCLick)
+            .clickable(onClick = onClick)
             .applyInfoBarPadding(),
         indicator = { Indicator(icon = Icons.Filled.Edit, description = "编辑") }
     ) {
@@ -338,8 +351,7 @@ fun PeriodEditor(
 @Composable
 fun DurationDialog(
     initialDuration: Int,
-    context: android.content.Context,
-    onConfirm: (Int) -> Unit,
+    onConfirm: (Boolean, Int) -> Unit,
     onDismiss: () -> Unit
 ) {
     var duration by remember { mutableStateOf(initialDuration.toString()) }
@@ -386,15 +398,9 @@ fun DurationDialog(
         },
         confirmButton = {
             TextButton(stringResource(R.string.action_confirm)) {
-                val d = duration.toIntOrNull() ?: 0
-                if (d > 0) {
-                    if (setAllState) {
-                        scope.launch {
-                            context.setAllDurations(d)
-                        }
-                    } else {
-                        onConfirm(d)
-                    }
+                val duration = duration.toIntOrNull() ?: 0
+                if (duration > 0) {
+                    onConfirm(setAllState, duration)
                 }
             }
         },

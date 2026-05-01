@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.graphics.Bitmap
 import android.net.http.SslError
 import android.view.ViewGroup.LayoutParams
+import android.webkit.CookieManager
 import android.webkit.JavascriptInterface
 import android.webkit.SslErrorHandler
 import android.webkit.WebChromeClient
@@ -25,6 +26,7 @@ import androidx.compose.runtime.snapshots.SnapshotStateList
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalInspectionMode
 import androidx.compose.ui.viewinterop.AndroidView
+import com.telefonica.nestedscrollwebview.NestedScrollWebView
 import eric.schedule_exporter.util.DUMPER_NAME
 import eric.schedule_exporter.util.Dump
 import eric.schedule_exporter.util.randomUniqueString
@@ -46,7 +48,7 @@ fun WebView(
     BoxWithConstraints(modifier) {
         AndroidView(
             factory = { context ->
-                WebView(context).apply {
+                NestedScrollWebView(context).apply {
                     onCreated(this)
 
                     // WebView changes it's layout strategy based on
@@ -113,6 +115,7 @@ class WebViewContext : WebViewClient() {
             allowContentAccess = true
             setSupportMultipleWindows(false)
         }
+        CookieManager.getInstance().setAcceptThirdPartyCookies(webView, true)
     }
 
     override fun onPageStarted(view: WebView?, url: String?, favicon: Bitmap?) {

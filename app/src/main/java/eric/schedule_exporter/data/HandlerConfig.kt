@@ -5,13 +5,10 @@ import androidx.datastore.core.CorruptionException
 import androidx.datastore.core.DataStore
 import androidx.datastore.core.Serializer
 import androidx.datastore.dataStore
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_HANDLER
 import eric.schedule_exporter.handler.HandlerType
-import eric.schedule_exporter.handler.ScheduleHandler
 import eric.schedule_exporter.util.MiAIContext
-import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.NonCancellable
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.map
 import kotlinx.serialization.ExperimentalSerializationApi
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -23,28 +20,27 @@ import java.io.InputStream
 import java.io.OutputStream
 import java.util.EnumMap
 
-
 val Context.handlerConfig: DataStore<HandlerConfig> by dataStore(
     fileName = "HandlerConfig.json",
     serializer = HandlerConfig
 )
 
-suspend fun Context.setScheduleHandler(handler: ScheduleHandler<*>) {
-    withContext(Dispatchers.Main) {
-        SCHEDULE_HANDLER = handler
+val DataStore<HandlerConfig>.effectiveHandler: Flow<HandlerType>
+    get() = this.data.map {
+        val type = it.type
+        if (type.handler.loadSpec(it.specs[type])) type else HandlerType.WAKE_UP_HANDLER
     }
-    withContext(NonCancellable + Dispatchers.IO) {
-        handlerConfig.updateData {
-            val type = SCHEDULE_HANDLER.type
-            val spec = type.handler.saveSpec()
-            if (spec === null) {
-                it.copy(type = type)
-            } else {
-                val specs = EnumMap<HandlerType, HandlerSpec>(HandlerType::class.java)
-                specs.putAll(it.specs)
-                specs[type] = spec
-                HandlerConfig(type, specs)
-            }
+
+suspend fun Context.setScheduleHandler(type: HandlerType) {
+    this.handlerConfig.updateData {
+        val spec = type.handler.saveSpec()
+        if (spec === null) {
+            it.copy(type = type)
+        } else {
+            val specs = EnumMap<HandlerType, HandlerSpec>(HandlerType::class.java)
+            specs.putAll(it.specs)
+            specs[type] = spec
+            HandlerConfig(type, specs)
         }
     }
 }

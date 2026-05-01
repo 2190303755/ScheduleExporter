@@ -4,12 +4,10 @@ import android.app.Activity
 import android.content.ClipData
 import android.content.Context
 import android.content.Intent
-import android.view.View
 import android.view.ViewGroup.LayoutParams
 import androidx.collection.MutableIntSet
 import androidx.compose.foundation.layout.BoxWithConstraintsScope
 import androidx.compose.ui.unit.Constraints
-import com.google.android.material.behavior.HideViewOnScrollBehavior
 import org.apache.commons.text.StringEscapeUtils
 import kotlin.uuid.ExperimentalUuidApi
 import kotlin.uuid.Uuid
@@ -22,15 +20,6 @@ inline fun <reified T> Iterator<T>.skip(): Boolean {
         return true
     }
     return false
-}
-
-inline fun <reified T : View> T.withHideBehavior(action: HideViewOnScrollBehavior<T>.() -> Unit) {
-    val behavior = try {
-        HideViewOnScrollBehavior.from(this)
-    } catch (_: Exception) {
-        return
-    }
-    behavior.action()
 }
 
 inline fun Int.spacedBy(space: () -> Int): Int = if (0 == this) 0 else this + space()
@@ -57,9 +46,7 @@ fun String.unwrapAndUnescape(): String = StringEscapeUtils.unescapeEcmaScript(
 )
 
 fun MutableIntSet.addRangeClosed(from: Int, to: Int) {
-    for (value in minOf(from, to)..maxOf(from, to)) {
-        this += value
-    }
+    (minOf(from, to)..maxOf(from, to)).forEach(this::add)
 }
 
 inline fun BoxWithConstraintsScope.resolveLayoutParams(

@@ -19,7 +19,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.MenuDefaults
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.MutableState
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -49,8 +48,9 @@ val ItemContentPadding: PaddingValues =
 @OptIn(ExperimentalMaterial3Api::class, ExperimentalMaterial3ExpressiveApi::class)
 @Composable
 fun <T> DropdownMenuChip(
-    selected: MutableState<T>,
-    options: List<T>,
+    options: Collection<T>,
+    selected: T,
+    onSelect: (T) -> Unit,
     modifier: Modifier = Modifier,
     namer: @Composable (T) -> String,
 ) {
@@ -60,7 +60,7 @@ fun <T> DropdownMenuChip(
         AssistChip(
             onClick = {},
             label = {
-                Text(text = namer(selected.value))
+                Text(text = namer(selected))
             },
             trailingIcon = {
                 ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded)
@@ -88,9 +88,9 @@ fun <T> DropdownMenuChip(
                             modifier = Modifier.basicMarquee()
                         )
                     },
-                    selected = option == selected.value,
+                    selected = option == selected,
                     onClick = {
-                        selected.value = option
+                        onSelect(option)
                         onExpandedChange(false)
                     },
                     selectedLeadingIcon = {

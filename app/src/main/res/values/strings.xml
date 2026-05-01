@@ -5,6 +5,7 @@
     <string name="action_forward">Go Forward</string>
     <string name="action_reload">Reload</string>
     <string name="action_url">Copy URL</string>
+    <string name="clear_text">Clear Text</string>
     <string name="expander_expand">Expand</string>
     <string name="expander_collapse">Collapse</string>
     <string name="toggle_dock">Toggle Docked Bar</string>
@@ -17,7 +18,6 @@
     <string name="action_unify_duration">Unify Duration</string>
     <string name="action_confirm">Confirm</string>
     <string name="action_cancel">Cancel</string>
-    <string name="title_activity_new">NewActivity</string>
     <string name="app_wakeup" translatable="false">WakeUp课程表</string>
     <string name="app_miai" translatable="false">小爱课程表</string>
     <string name="miai_integrated">Xiaomi Hyper XiaoAi</string>

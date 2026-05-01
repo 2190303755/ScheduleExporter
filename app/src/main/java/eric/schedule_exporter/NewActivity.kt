@@ -14,6 +14,7 @@ import android.webkit.WebView
 import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.enableEdgeToEdge
+import androidx.activity.viewModels
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.Crossfade
 import androidx.compose.animation.core.animateDpAsState
@@ -37,13 +38,15 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.input.TextFieldState
+import androidx.compose.foundation.text.input.clearText
 import androidx.compose.foundation.text.input.rememberTextFieldState
 import androidx.compose.foundation.text.input.setTextAndPlaceCursorAtEnd
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Clear
 import androidx.compose.material.icons.filled.Computer
-import androidx.compose.material.icons.filled.ContentCopy
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.UploadFile
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -77,6 +80,7 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.rememberContainedSearchBarState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -90,17 +94,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
-import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.zIndex
 import androidx.core.content.getSystemService
 import androidx.lifecycle.lifecycleScope
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_HANDLER
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.SCHEDULE_PARSER
-import eric.schedule_exporter.ScheduleExporterApplication.Companion.URL_SUGGESTIONS
-import eric.schedule_exporter.handler.dumpSchedule
-import eric.schedule_exporter.handler.exportSchedule
+import eric.schedule_exporter.model.ExporterViewModel
 import eric.schedule_exporter.parser.ParserContext
 import eric.schedule_exporter.parser.ScheduleParser
 import eric.schedule_exporter.ui.AppBarWithSearch
@@ -124,16 +123,18 @@ import eric.schedule_exporter.util.toUri
 import eric.schedule_exporter.util.unwrapAndUnescape
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.zip.ZipEntry
 import java.util.zip.ZipOutputStream
 
-class NewActivity : ComponentActivity() {
+class NewActivity : ComponentActivity(), Exporter {
+    override val viewModel by viewModels<ExporterViewModel>()
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
         override fun onAvailable(network: Network) {
-            this@NewActivity.lifecycleScope.launch(Dispatchers.Main) {
-                URL_SUGGESTIONS.forEach {
+            lifecycleScope.launch(Dispatchers.Main) {
+                viewModel.urlSuggestions.forEach {
                     it.onNetworkAvailable(network)
                 }
             }
@@ -157,10 +158,10 @@ class NewActivity : ComponentActivity() {
         WebView.setWebContentsDebuggingEnabled(true)
         this.enableEdgeToEdge()
         this.setThemedContent {
-            val scope = rememberCoroutineScope()
+            val coroutineScope = rememberCoroutineScope()
             var toolbarVisible by rememberSaveable { mutableStateOf(true) }
             var toolbarExpended by rememberSaveable { mutableStateOf(true) }
-            val webViewContext = remember { WebViewContext() }
+            val webviewContext = remember { WebViewContext() }
             val textFieldState = rememberTextFieldState()
             val searchBarState = rememberContainedSearchBarState()
             val suggestionState = rememberLazyListState()
@@ -174,26 +175,37 @@ class NewActivity : ComponentActivity() {
                     searchBarState = searchBarState,
                     colors = LocalTextFieldColors.current,
                     onSearch = {
-                        if (!it.isBlank()) {
-                            webViewContext.navigateTo(it, this@NewActivity)
-                        }
-                        scope.launch {
+                        coroutineScope.launch {
+                            if (!it.isBlank()) {
+                                webviewContext.navigateTo(it)
+                            }
                             searchBarState.animateToCollapsed()
                         }
                     },
-                    placeholder = {
-                        Text(
-                            modifier = Modifier.clearAndSetSemantics {},
-                            text = webViewContext.webView?.url ?: webViewContext.location
+                    leadingIcon = {
+                        SearchBarLeadingIcon(
+                            webviewContext,
+                            searchBarState,
+                            coroutineScope
                         )
                     },
-                    leadingIcon = { SearchBarLeadingIcon(webViewContext, searchBarState, scope) },
-                    trailingIcon = { SearchBarTrailingIcon(webViewContext, searchBarState) },
+                    trailingIcon = {
+                        SearchBarTrailingIcon(
+                            webviewContext,
+                            searchBarState,
+                            textFieldState
+                        )
+                    },
                 )
             }
             Scaffold(
                 modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
                 topBar = {
+                    LaunchedEffect(searchBarState.targetValue) {
+                        if (searchBarState.targetValue == SearchBarValue.Collapsed) {
+                            textFieldState.setTextAndPlaceCursorAtEnd(webviewContext.location)
+                        }
+                    }
                     AppBarWithSearch(
                         state = searchBarState,
                         inputField = inputField,
@@ -225,7 +237,7 @@ class NewActivity : ComponentActivity() {
                                     Icons.Outlined.ContentCopy,
                                     stringResource(R.string.action_url)
                                 ) {
-                                    webViewContext.webView?.apply {
+                                    webviewContext.webView?.apply {
                                         context.getSystemService<ClipboardManager>()
                                             ?.setPrimaryClip(
                                                 ClipData.newPlainText(title, url)
@@ -270,7 +282,7 @@ class NewActivity : ComponentActivity() {
                             colors = appBarWithSearchColors.searchBarColors
                         ) {
                             LazyColumn(state = suggestionState) {
-                                items(URL_SUGGESTIONS) {
+                                items(viewModel.urlSuggestions) {
                                     ListItem(
                                         headlineContent = { Text(it.name) },
                                         supportingContent = { Text(it.url) },
@@ -279,12 +291,9 @@ class NewActivity : ComponentActivity() {
                                             .fillMaxWidth()
                                             .clickable {
                                                 textFieldState.setTextAndPlaceCursorAtEnd(it.url)
-                                                scope.launch {
+                                                coroutineScope.launch {
+                                                    webviewContext.navigateTo(it.url)
                                                     searchBarState.animateToCollapsed()
-                                                    webViewContext.navigateTo(
-                                                        it.url,
-                                                        this@NewActivity
-                                                    )
                                                 }
                                             }
                                     )
@@ -297,7 +306,7 @@ class NewActivity : ComponentActivity() {
                 Box {
                     AnimatedVisibility(
                         visible = remember {
-                            derivedStateOf { webViewContext.progress != null }
+                            derivedStateOf { webviewContext.progress != null }
                         }.value,
                         enter = fadeIn(),
                         exit = fadeOut(),
@@ -309,7 +318,7 @@ class NewActivity : ComponentActivity() {
                     ) {
                         LinearProgressIndicator(
                             progress = animateFloatAsState(
-                                targetValue = (webViewContext.progress ?: 0) / 100.0F,
+                                targetValue = (webviewContext.progress ?: 0) / 100.0F,
                                 animationSpec = ProgressIndicatorDefaults.ProgressAnimationSpec,
                             )::value,
                             modifier = Modifier.fillMaxWidth()
@@ -330,7 +339,7 @@ class NewActivity : ComponentActivity() {
                             leadingContent = {
                                 TooltipBox(stringResource(R.string.action_backward)) { tooltip ->
                                     IconButton(Icons.AutoMirrored.Filled.ArrowBack, tooltip) {
-                                        webViewContext.webView?.goBack()
+                                        webviewContext.webView?.goBack()
                                     }
                                 }
                                 Spacer(modifier = Modifier.width(4.dp))
@@ -342,33 +351,21 @@ class NewActivity : ComponentActivity() {
                                         Icons.AutoMirrored.Filled.ArrowForward,
                                         tooltip
                                     ) {
-                                        webViewContext.webView?.goForward()
+                                        webviewContext.webView?.goForward()
                                     }
                                 }
                             },
                             content = {
-                                val width by animateDpAsState(if (toolbarExpended) 96.dp else 64.dp)
                                 TooltipBox(stringResource(R.string.action_export)) {
+                                    val width by animateDpAsState(if (toolbarExpended) 96.dp else 64.dp)
                                     FilledIconButton(
                                         modifier = Modifier.width(width),
-                                        onClick = click@{
-                                            val parser =
-                                                webViewContext.getParser() ?: return@click
-                                            webViewContext.webView?.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
-                                                if (result === null || result == QUOTED_DO_NOT_CONTINUE) {
-                                                    return@eval
-                                                }
-                                                lifecycleScope.launch(Dispatchers.Default) {
-                                                    SCHEDULE_HANDLER.exportSchedule(
-                                                        parser.parseSchedule(
-                                                            object : ParserContext {
-                                                                override fun dumpSource(message: String?) {}
-                                                            },
-                                                            result.unwrapAndUnescape()
-                                                        ),
-                                                        this@NewActivity
-                                                    )
-                                                }
+                                        onClick = {
+                                            lifecycleScope.launch {
+                                                viewModel.effectiveHandler.first().handler.parseAndExport(
+                                                    this@NewActivity,
+                                                    webviewContext
+                                                )
                                             }
                                         }
                                     ) {
@@ -379,7 +376,7 @@ class NewActivity : ComponentActivity() {
                         )
                     }
                     WebView(
-                        state = webViewContext,
+                        state = webviewContext,
                         modifier = Modifier
                             .padding(padding)
                             .fillMaxSize()
@@ -389,9 +386,109 @@ class NewActivity : ComponentActivity() {
                                 onCollapse = { toolbarExpended = false },
                             ),
                         onCreated = {
-                            webViewContext.init(it)
+                            webviewContext.init(it)
                         }
                     )
+                }
+            }
+            viewModel.currentPopup?.handler?.Popup(this, webviewContext)
+        }
+    }
+
+    override suspend fun parseAndExport(
+        context: WebViewContext,
+        method: ExportMethod<*>
+    ) {
+        val parser = context.resolveParser() ?: return
+        context.webView?.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
+            if (result === null || result == QUOTED_DO_NOT_CONTINUE) return@eval
+            lifecycleScope.launch(Dispatchers.Default) {
+                method.exportSchedule(
+                    parser.parseSchedule(
+                        object : ParserContext {
+                            override fun dumpSource(message: String?) {}
+                        },
+                        result.unwrapAndUnescape()
+                    ),
+                    this@NewActivity
+                )
+            }
+        }
+    }
+
+    suspend fun WebViewContext.resolveParser(): ScheduleParser? {
+        return viewModel.parserConfig.first().parser.resolveParser(this.webView?.url)
+    }
+
+    suspend fun WebViewContext.navigateTo(dest: String) {
+        when (dest) {
+            "app://csv" -> {
+                val parser = this.resolveParser() ?: return
+                this.webView?.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
+                    if (result === null || result == QUOTED_DO_NOT_CONTINUE) return@eval
+                    lifecycleScope.launch(Dispatchers.Default) {
+                        viewModel.effectiveHandler.first().handler.dumpSchedule(
+                            parser.parseSchedule(
+                                object : ParserContext {
+                                    override fun dumpSource(message: String?) {}
+                                },
+                                result.unwrapAndUnescape()
+                            ),
+                            this@NewActivity
+                        )
+                    }
+                }
+            }
+
+            "app://dump" -> {
+                this.dumpSource(null)
+            }
+
+            "app://console" -> {
+                this.webView?.evaluateJavascript(INJECT_CONSOLE) { result ->
+                    Toast.makeText(
+                        this@NewActivity,
+                        result.unwrapAndUnescape(),
+                        Toast.LENGTH_SHORT
+                    ).show()
+                }
+            }
+
+            else -> {
+                val url = if (Patterns.WEB_URL.matcher(dest).matches()) {
+                    dest
+                } else {
+                    "https://cn.bing.com/search?q=$dest"
+                }
+                this.webView?.loadUrl(url)
+                this.location = url
+            }
+        }
+    }
+
+    fun WebViewContext.dumpSource(message: String?) {
+        this.webView?.evaluateJavascript(DUMP_SOURCES) { result ->
+            val uuid = result.substring(1, result.lastIndex)
+            val dumps = this.reports[uuid] ?: return@evaluateJavascript
+            lifecycleScope.launch(Dispatchers.IO) {
+                val file = this@NewActivity.getDumpDir().resolveUnique(uuid) { "$it.zip" }
+                ZipOutputStream(file.outputStream()).use {
+                    it.setComment(message ?: "$DO_NOT_CONTINUE (null)")
+                    for (dump in dumps) {
+                        it.putNextEntry(ZipEntry(dump.name))
+                        it.write(dump.content.toByteArray(Charsets.UTF_8))
+                        it.closeEntry()
+                    }
+                }
+                val intent = Intent.createChooser(
+                    Intent(Intent.ACTION_SEND).apply {
+                        type = MIME_TYPE_ZIP
+                        putExtra(Intent.EXTRA_STREAM, file.toUri(this@NewActivity))
+                    },
+                    null
+                )
+                withContext(Dispatchers.Main) {
+                    this@NewActivity.startActivity(intent)
                 }
             }
         }
@@ -436,24 +533,23 @@ private fun SearchBarLeadingIcon(
 }
 
 @Composable
-private fun SearchBarTrailingIcon(webViewContext: WebViewContext, searchBarState: SearchBarState) {
+private fun SearchBarTrailingIcon(
+    webViewContext: WebViewContext,
+    searchBarState: SearchBarState,
+    textFieldState: TextFieldState
+) {
     val searching = searchBarState.targetValue == SearchBarValue.Expanded
-    TooltipBox(stringResource(if (searching) R.string.action_url else R.string.action_reload)) {
+    TooltipBox(stringResource(if (searching) R.string.clear_text else R.string.action_reload)) {
         IconButton(onClick = {
             if (searching) {
-                webViewContext.webView?.apply {
-                    context.getSystemService<ClipboardManager>()
-                        ?.setPrimaryClip(
-                            ClipData.newPlainText(title, url)
-                        )
-                }
+                textFieldState.clearText()
             } else {
                 webViewContext.webView?.reload()
             }
         }) {
             Crossfade(targetState = searching, animationSpec = tween(300)) { state ->
                 Icon(
-                    imageVector = if (state) Icons.Filled.ContentCopy else Icons.Filled.Refresh,
+                    imageVector = if (state) Icons.Filled.Clear else Icons.Filled.Refresh,
                     contentDescription = it
                 )
             }
@@ -461,84 +557,3 @@ private fun SearchBarTrailingIcon(webViewContext: WebViewContext, searchBarState
     }
 }
 
-fun WebViewContext.navigateTo(dest: String, context: ComponentActivity) {
-    when (dest) {
-        "app://csv" -> {
-            val parser = this.getParser() ?: return
-            this.webView?.evaluateJavascript(parser.injectJavaScript()) eval@{ result ->
-                if (result === null || result == QUOTED_DO_NOT_CONTINUE) {
-                    return@eval
-                }
-                context.lifecycleScope.launch(Dispatchers.Default) {
-                    SCHEDULE_HANDLER.dumpSchedule(
-                        parser.parseSchedule(
-                            object : ParserContext {
-                                override fun dumpSource(message: String?) {}
-                            },
-                            result.unwrapAndUnescape()
-                        ),
-                        context
-                    )
-                }
-            }
-        }
-
-        "app://dump" -> {
-            dumpSource(context, null)
-        }
-
-        "app://console" -> {
-            webView?.evaluateJavascript(INJECT_CONSOLE) { result ->
-                Toast.makeText(
-                    context,
-                    result.unwrapAndUnescape(),
-                    Toast.LENGTH_SHORT
-                ).show()
-            }
-        }
-
-        else -> {
-            val url = if (Patterns.WEB_URL.matcher(dest).matches()) {
-                dest
-            } else {
-                "https://cn.bing.com/search?q=$dest"
-            }
-            this.webView?.loadUrl(url)
-            this.location = url
-            return
-        }
-    }
-}
-
-
-fun WebViewContext.dumpSource(context: ComponentActivity, message: String?) {
-    webView?.evaluateJavascript(DUMP_SOURCES) { result ->
-        val uuid = result.substring(1, result.lastIndex)
-        val dumps = reports[uuid] ?: return@evaluateJavascript
-        context.lifecycleScope.launch(Dispatchers.IO) {
-            val file = context.getDumpDir().resolveUnique(uuid) { "$it.zip" }
-            ZipOutputStream(file.outputStream()).use {
-                it.setComment(message ?: "$DO_NOT_CONTINUE (null)")
-                for (dump in dumps) {
-                    it.putNextEntry(ZipEntry(dump.name))
-                    it.write(dump.content.toByteArray(Charsets.UTF_8))
-                    it.closeEntry()
-                }
-            }
-            val intent = Intent.createChooser(
-                Intent(Intent.ACTION_SEND).apply {
-                    type = MIME_TYPE_ZIP
-                    putExtra(Intent.EXTRA_STREAM, file.toUri(context))
-                },
-                null
-            )
-            withContext(Dispatchers.Main) {
-                context.startActivity(intent)
-            }
-        }
-    }
-}
-
-fun WebViewContext.getParser(): ScheduleParser? {
-    return SCHEDULE_PARSER.resolveParser(webView?.url)
-}

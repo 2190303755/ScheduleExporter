@@ -5,6 +5,7 @@
     <string name="action_forward">前进</string>
     <string name="action_reload">刷新</string>
     <string name="action_url">复制URL</string>
+    <string name="clear_text">清除文本</string>
     <string name="expander_expand">展开</string>
     <string name="expander_collapse">收起</string>
     <string name="toggle_dock">开关工具栏</string>

@@ -7,11 +7,14 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
+import eric.schedule_exporter.ExportMethod
+import eric.schedule_exporter.Exporter
 import eric.schedule_exporter.R
 import eric.schedule_exporter.data.HandlerSpec
 import eric.schedule_exporter.data.setScheduleHandler
 import eric.schedule_exporter.handler.HandlerType
 import eric.schedule_exporter.handler.ScheduleHandler
+import eric.schedule_exporter.ui.WebViewContext
 import eric.schedule_exporter.util.MIME_TYPE_CSV
 import eric.schedule_exporter.util.Session
 import eric.schedule_exporter.util.getScheduleDir
@@ -23,7 +26,7 @@ import kotlinx.coroutines.withContext
 import org.apache.commons.text.StringEscapeUtils
 import java.io.OutputStream
 
-object WakeUpHandler : ScheduleHandler<Map<Session, IntSet>> {
+object WakeUpHandler : ScheduleHandler<Map<Session, IntSet>>, ExportMethod<Map<Session, IntSet>> {
     override val type: HandlerType
         get() = HandlerType.WAKE_UP_HANDLER
 
@@ -70,13 +73,17 @@ object WakeUpHandler : ScheduleHandler<Map<Session, IntSet>> {
     override suspend fun saveSpec(): HandlerSpec? = null
 
     @Composable
+    override fun displayName() = stringResource(R.string.app_wakeup)
+
+    @Composable
     override fun ConfigSection(onCancel: () -> Unit) {
         val context = LocalContext.current
         LaunchedEffect(Unit) {
-            context.setScheduleHandler(WakeUpHandler)
+            context.setScheduleHandler(HandlerType.WAKE_UP_HANDLER)
         }
     }
 
-    @Composable
-    override fun displayName() = stringResource(R.string.app_wakeup)
+    override suspend fun parseAndExport(exporter: Exporter, webViewContext: WebViewContext) {
+        exporter.parseAndExport(webViewContext, this)
+    }
 }
